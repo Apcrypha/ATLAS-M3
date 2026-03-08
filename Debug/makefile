@@ -10,6 +10,7 @@ RM := rm -rf
 # All of the sources participating in the build are defined here
 -include sources.mk
 -include Drivers/STM32F4xx_HAL_Driver/Src/subdir.mk
+-include Drivers/MPU6500/subdir.mk
 -include Core/Startup/subdir.mk
 -include Core/Src/subdir.mk
 -include objects.mk
@@ -34,34 +35,34 @@ $(wildcard ../makefile.init) \
 $(wildcard ../makefile.targets) \
 
 
-BUILD_ARTIFACT_NAME := Drone MCU
+BUILD_ARTIFACT_NAME := ATLAS-M3
 BUILD_ARTIFACT_EXTENSION := elf
 BUILD_ARTIFACT_PREFIX :=
 BUILD_ARTIFACT := $(BUILD_ARTIFACT_PREFIX)$(BUILD_ARTIFACT_NAME)$(if $(BUILD_ARTIFACT_EXTENSION),.$(BUILD_ARTIFACT_EXTENSION),)
 
 # Add inputs and outputs from these tool invocations to the build variables 
 EXECUTABLES += \
-Drone\ MCU.elf \
+ATLAS-M3.elf \
 
 MAP_FILES += \
-Drone\ MCU.map \
+ATLAS-M3.map \
 
 SIZE_OUTPUT += \
 default.size.stdout \
 
 OBJDUMP_LIST += \
-Drone\ MCU.list \
+ATLAS-M3.list \
 
 
 # All Target
 all: main-build
 
 # Main-build Target
-main-build: Drone\ MCU.elf secondary-outputs
+main-build: ATLAS-M3.elf secondary-outputs
 
 # Tool invocations
-Drone\ MCU.elf Drone\ MCU.map: $(OBJS) $(USER_OBJS) C:\Users\fgclg\Personal\Program\Microcontrollers\STM32\Drone\ MCU\STM32F407VETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "Drone MCU.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\fgclg\Personal\Program\Microcontrollers\STM32\Drone MCU\STM32F407VETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Drone MCU.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+ATLAS-M3.elf ATLAS-M3.map: $(OBJS) $(USER_OBJS) C:\Users\fgclg\Personal\Program\Microcontrollers\STM32\ATLAS-M3\STM32F407VETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "ATLAS-M3.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\fgclg\Personal\Program\Microcontrollers\STM32\ATLAS-M3\STM32F407VETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="ATLAS-M3.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -70,14 +71,14 @@ default.size.stdout: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
-Drone\ MCU.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "Drone MCU.list"
+ATLAS-M3.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "ATLAS-M3.list"
 	@echo 'Finished building: $@'
 	@echo ' '
 
 # Other Targets
 clean:
-	-$(RM) Drone\ MCU.elf Drone\ MCU.list Drone\ MCU.map Drone\\ MCU.elf default.size.stdout
+	-$(RM) ATLAS-M3.elf ATLAS-M3.list ATLAS-M3.map default.size.stdout
 	-@echo ' '
 
 secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST)

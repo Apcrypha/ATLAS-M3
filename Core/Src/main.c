@@ -21,20 +21,20 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "driver_mpu6500.h"		// use mpu6500_read() at line 4137
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 typedef struct{
-	uint16_t aX;		//Accelerometer
-	uint16_t aY;
-	uint16_t aZ;
+	int16_t aX;		//Accelerometer
+	int16_t aY;
+	int16_t aZ;
 
-	uint16_t gX;		//Gyroscope
-	uint16_t gY;
-	uint16_t gZ;
+	int16_t gX;		//Gyroscope
+	int16_t gY;
+	int16_t gZ;
 }MPU_data;
 
 
@@ -56,6 +56,8 @@ I2C_HandleTypeDef hi2c1;
 TIM_HandleTypeDef htim1;
 
 /* USER CODE BEGIN PV */
+mpu6500_handle_t mpu_handle;
+MPU_data MPU_Data;
 
 /* USER CODE END PV */
 
@@ -65,7 +67,7 @@ static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
-
+uint8_t readMPU(mpu6500_handle_t *handle, MPU_data *MPU_Values);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -212,9 +214,7 @@ static void MX_TIM1_Init(void)
   /* USER CODE END TIM1_Init 0 */
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_SlaveConfigTypeDef sSlaveConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_IC_InitTypeDef sConfigIC = {0};
 
   /* USER CODE BEGIN TIM1_Init 1 */
 
@@ -235,27 +235,9 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_TIM_IC_Init(&htim1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sSlaveConfig.SlaveMode = TIM_SLAVEMODE_DISABLE;
-  sSlaveConfig.InputTrigger = TIM_TS_ITR1;
-  if (HAL_TIM_SlaveConfigSynchro(&htim1, &sSlaveConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
-  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
-  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
-  sConfigIC.ICFilter = 0;
-  if (HAL_TIM_IC_ConfigChannel(&htim1, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -297,6 +279,33 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+uint8_t readMPU(mpu6500_handle_t *handle, MPU_data *MPU_Data){
+	int16_t accel_raw[1][3];
+	float accel_g[1][3];
+	int16_t gyro_raw[1][3];
+	float gyro_dps[1][3];
+
+	uint16_t len=1;
+	uint8_t res = mpu6500_read(handle,accel_raw,accel_g,gyro_raw,gyro_dps,&len);
+
+	if (res != 0){ 	return res;	}
+	MPU_Data ->aX = accel_g[0][0];
+	MPU_Data ->aY = accel_g[0][1];
+	MPU_Data ->aZ = accel_g[0][2];
+
+	MPU_Data ->gX = gyro_dps[0][0];
+	MPU_Data ->gY = gyro_dps[0][1];
+	MPU_Data ->gZ = gyro_dps[0][2];
+
+	return 0;
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
+	if(GPIO_Pin == GPIO_PIN_8){
+		readMPU(&mpu_handle, &MPU_Data);
+	}
+}
 
 /* USER CODE END 4 */
 
