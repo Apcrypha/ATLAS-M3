@@ -1,0 +1,17 @@
+../Drivers/MPU6500/mpu6500.c:131:33:MPU6500_WriteRegister	1
+../Drivers/MPU6500/mpu6500.c:141:33:MPU6500_ReadRegister	1
+../Drivers/MPU6500/mpu6500.c:149:33:MPU6500_Reset	1
+../Drivers/MPU6500/mpu6500.c:157:33:MPU6500_ConfigureClock	1
+../Drivers/MPU6500/mpu6500.c:168:33:MPU6500_ConfigureAccel	3
+../Drivers/MPU6500/mpu6500.c:184:33:MPU6500_ConfigureGyro	3
+../Drivers/MPU6500/mpu6500.c:205:33:MPU6500_EnableTemperatureSensor	2
+../Drivers/MPU6500/mpu6500.c:237:33:MPU6500_ConfigureInterrupts	2
+../Drivers/MPU6500/mpu6500.c:255:19:MPU6500_Init	7
+../Drivers/MPU6500/mpu6500.c:284:19:MPU6500_EnableDataReadyInterrupts	1
+../Drivers/MPU6500/mpu6500.c:293:19:MPU6500_DisableDataReadyInterrupts	1
+../Drivers/MPU6500/mpu6500.c:302:19:MPU6500_ReadWhoAmI	1
+../Drivers/MPU6500/mpu6500.c:315:19:MPU6500_ReadAccel	2
+../Drivers/MPU6500/mpu6500.c:337:19:MPU6500_ReadGyro	2
+../Drivers/MPU6500/mpu6500.c:358:19:MPU6500_ReadTemp	2
+../Drivers/MPU6500/mpu6500.c:377:19:MPU6500_Sleep	2
+../Drivers/MPU6500/mpu6500.c:394:19:MPU6500_WakeUp	2

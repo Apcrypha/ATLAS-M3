@@ -5,13 +5,13 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
-../Drivers/MPU6500/driver_mpu6500.c 
+../Drivers/MPU6500/mpu6500.c 
 
 OBJS += \
-./Drivers/MPU6500/driver_mpu6500.o 
+./Drivers/MPU6500/mpu6500.o 
 
 C_DEPS += \
-./Drivers/MPU6500/driver_mpu6500.d 
+./Drivers/MPU6500/mpu6500.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
@@ -21,7 +21,7 @@ Drivers/MPU6500/%.o Drivers/MPU6500/%.su Drivers/MPU6500/%.cyclo: ../Drivers/MPU
 clean: clean-Drivers-2f-MPU6500
 
 clean-Drivers-2f-MPU6500:
-	-$(RM) ./Drivers/MPU6500/driver_mpu6500.cyclo ./Drivers/MPU6500/driver_mpu6500.d ./Drivers/MPU6500/driver_mpu6500.o ./Drivers/MPU6500/driver_mpu6500.su
+	-$(RM) ./Drivers/MPU6500/mpu6500.cyclo ./Drivers/MPU6500/mpu6500.d ./Drivers/MPU6500/mpu6500.o ./Drivers/MPU6500/mpu6500.su
 
 .PHONY: clean-Drivers-2f-MPU6500
 
