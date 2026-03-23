@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "mpu6500.h"		// use mpu6500_read() at line 4137
+#include "mpu6500.h"
 
 /* USER CODE END Includes */
 
@@ -53,8 +53,6 @@ typedef struct{
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-//#define MPU6500_INT_Pin        GPIO_PIN_8
-//#define MPU6500_INT_GPIO_Port  GPIOE
 
 /* USER CODE END PD */
 
@@ -72,10 +70,13 @@ DMA_HandleTypeDef hdma_tim5_ch2;
 DMA_HandleTypeDef hdma_tim5_ch3_up;
 DMA_HandleTypeDef hdma_tim5_ch4_trig;
 
+UART_HandleTypeDef huart4;
+
 /* USER CODE BEGIN PV */
 MPU_data MPU_Data;
 HAL_StatusTypeDef status;
 
+volatile uint8_t mpuStatus = 0;
 
 
 /* USER CODE END PV */
@@ -86,6 +87,7 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM5_Init(void);
+static void MX_UART4_Init(void);
 /* USER CODE BEGIN PFP */
 
 void readMPU();
@@ -128,6 +130,7 @@ int main(void)
   MX_DMA_Init();
   MX_I2C1_Init();
   MX_TIM5_Init();
+  MX_UART4_Init();
   /* USER CODE BEGIN 2 */
   status = MPU6500_Init();
   if(status != HAL_OK){
@@ -137,6 +140,7 @@ int main(void)
   if(status != HAL_OK){
       Error_Handler();
   }
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -146,8 +150,11 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  readMPU();
-	  HAL_Delay(100);
+	  if(mpuStatus == 1){
+		  mpuStatus = 0;
+		  readMPU();
+	  }
+
   }
   /* USER CODE END 3 */
 }
@@ -304,6 +311,39 @@ static void MX_TIM5_Init(void)
 }
 
 /**
+  * @brief UART4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_UART4_Init(void)
+{
+
+  /* USER CODE BEGIN UART4_Init 0 */
+
+  /* USER CODE END UART4_Init 0 */
+
+  /* USER CODE BEGIN UART4_Init 1 */
+
+  /* USER CODE END UART4_Init 1 */
+  huart4.Instance = UART4;
+  huart4.Init.BaudRate = 115200;
+  huart4.Init.WordLength = UART_WORDLENGTH_8B;
+  huart4.Init.StopBits = UART_STOPBITS_1;
+  huart4.Init.Parity = UART_PARITY_NONE;
+  huart4.Init.Mode = UART_MODE_TX_RX;
+  huart4.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart4.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN UART4_Init 2 */
+
+  /* USER CODE END UART4_Init 2 */
+
+}
+
+/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -343,11 +383,12 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin : PE8 */
   GPIO_InitStruct.Pin = GPIO_PIN_8;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
@@ -363,19 +404,19 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 void readMPU(){
+	uint8_t int_status;
 	int16_t accel_x, accel_y, accel_z;
 	int16_t gyro_x, gyro_y, gyro_z;
 
+	//Acknowledge that the INP pin was received.
+	HAL_I2C_Mem_Read(&hi2c1, (0x68 << 1), 0x3A, I2C_MEMADD_SIZE_8BIT, &int_status, 1, 100);
+
 	// Read raw sensor data
 	status = MPU6500_ReadAccel(&accel_x, &accel_y, &accel_z);
-	if(status != HAL_OK){
-	    Error_Handler();
-	}
+	if(status != HAL_OK){ Error_Handler();	}
 
 	status = MPU6500_ReadGyro(&gyro_x, &gyro_y, &gyro_z);
-	if(status != HAL_OK){
-	    Error_Handler();
-	}
+	if(status != HAL_OK){ Error_Handler();	}
 
 	MPU_Data.RAWaX = accel_x;
 	MPU_Data.RAWaY = accel_y;
@@ -386,10 +427,10 @@ void readMPU(){
 	MPU_Data.RAWgZ = gyro_z;
 
 	// Convert raw data to physical units
-	// For ±16g range: 1g = 2048 LSB
-	MPU_Data.aX = accel_x / 2048.0f;
-	MPU_Data.aY = accel_y / 2048.0f;
-	MPU_Data.aZ = accel_z / 2048.0f;
+	// For ±8g range: 1g = 4096 LSB
+	MPU_Data.aX = accel_x / 4096.0f;
+	MPU_Data.aY = accel_y / 4096.0f;
+	MPU_Data.aZ = accel_z / 4096.0f;
 
 	// For ±2000°/s range: 1°/s = 16.4 LSB
 	// In  degrees per second
@@ -401,14 +442,11 @@ void readMPU(){
 
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
-	if(GPIO_Pin == GPIO_PIN_8){ //Checks for any EXTI on all pin 8
-	//	if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_8) == GPIO_PIN_SET) { //check specifically for pin E8
-		//	readMPU
-			//readMPU();
-		//}
-		//readMPU();
+	if(GPIO_Pin == GPIO_PIN_8){
+		mpuStatus = 1;
 	}
 }
+
 
 /* USER CODE END 4 */
 

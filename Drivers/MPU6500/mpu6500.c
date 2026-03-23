@@ -167,9 +167,9 @@ static inline HAL_StatusTypeDef MPU6500_ConfigureClock(void){
  */
 static inline HAL_StatusTypeDef MPU6500_ConfigureAccel(void){
     HAL_StatusTypeDef status;
-    status = MPU6500_WriteRegister(ACCEL_CONFIG, 0x18); // ACCEL_FS_SEL[4:3] = 11 (±16g), bits [2:0] reserved (0)
+    status = MPU6500_WriteRegister(ACCEL_CONFIG, 0x10); // ACCEL_FS_SEL[4:3] = 11 (±16g),0x10 = ±8g ,0x18 = ±16g ,bits [2:0] reserved (0)
     if(status != HAL_OK) return status;
-    status = MPU6500_WriteRegister(ACCEL_CONFIG_2, 0x04); // ACCEL_DLPF_CFG[2:0] = 100 (20Hz, 1kHz)
+    status = MPU6500_WriteRegister(ACCEL_CONFIG_2, 0x00); // ACCEL_DLPF_CFG[2:0] = 100 (20Hz, 1kHz),0x00 = 184Hz
     if(status != HAL_OK) return status;
     return HAL_OK;
 }
@@ -185,7 +185,7 @@ static inline HAL_StatusTypeDef MPU6500_ConfigureGyro(void){
     HAL_StatusTypeDef status;
     status = MPU6500_WriteRegister(GYRO_CONFIG, 0x18); // GYRO_FS_SEL[1:0] = 11 | FCHOICE_B[1:0] = 00 || Full scale range = ±2000dps
     if(status != HAL_OK) return status;
-    status = MPU6500_WriteRegister(CONFIG, 0x04); // DLPF_CFG[2:0] = 100 || Gyroscope low pass filter Bandwidth = 20Hz | Data Rate = 1kHz
+    status = MPU6500_WriteRegister(CONFIG, 0x00); // DLPF_CFG[2:0] = 100 || Gyroscope low pass filter Bandwidth = 20Hz | Data Rate = 1kHz
     if(status != HAL_OK) return status;
     return HAL_OK;  
 } 
@@ -236,7 +236,7 @@ static inline HAL_StatusTypeDef MPU6500_DisableTemperatureSensor(void){
  */ 
 static inline HAL_StatusTypeDef MPU6500_ConfigureInterrupts(void){
     HAL_StatusTypeDef status;
-    status = MPU6500_WriteRegister(INT_PIN_CFG, 0xB0); // ACTL[7] | OPEN[6] | LATCH_INT_EN[5] | INT_ANYRD_2CLEAR[4]
+    status = MPU6500_WriteRegister(INT_PIN_CFG, 0x90); // ACTL[7] | OPEN[6] | LATCH_INT_EN[5] | INT_ANYRD_2CLEAR[4]
     if(status != HAL_OK) return status;
     return HAL_OK;
 }
