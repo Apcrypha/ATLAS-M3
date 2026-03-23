@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "mpu6500.h"
 
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -64,6 +65,7 @@ typedef struct{
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
+TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim5;
 DMA_HandleTypeDef hdma_tim5_ch1;
 DMA_HandleTypeDef hdma_tim5_ch2;
@@ -78,6 +80,8 @@ HAL_StatusTypeDef status;
 
 volatile uint8_t mpuStatus = 0;
 
+uint32_t periodCount = 1000;
+
 
 /* USER CODE END PV */
 
@@ -88,6 +92,7 @@ static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM5_Init(void);
 static void MX_UART4_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 void readMPU();
@@ -95,6 +100,27 @@ void readMPU();
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){
+	/*Convert servo pulse time to timer counts
+	 *MCU Frequency = 168MHz
+	 *Prescaler = 167
+	 *Clock tick = 168,000,000 / 167 + 1
+	 *Clock tick = 1uS
+	 *			From Datasheet
+	 *Minimum Counts =  300uS/1uS	  = 300		//0   deg
+	 *Maximum Counts =  1,300uS/1uS	  = 1300	//180 deg
+	*/
+
+	//Map angle (0-180) via linear interpolation
+	uint32_t pulse_length = 300 + (angle * (1300-300)/180);
+
+	__HAL_TIM_SET_COMPARE(htim,channel,pulse_length);
+
+
+}
+
+
 
 /* USER CODE END 0 */
 
@@ -131,7 +157,14 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM5_Init();
   MX_UART4_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+
+  //__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_3,10000);
+
+  /*
   status = MPU6500_Init();
   if(status != HAL_OK){
       Error_Handler();
@@ -140,6 +173,7 @@ int main(void)
   if(status != HAL_OK){
       Error_Handler();
   }
+  */
 
   /* USER CODE END 2 */
 
@@ -150,10 +184,23 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  if(mpuStatus == 1){
-		  mpuStatus = 0;
-		  readMPU();
-	  }
+
+
+	  for (uint8_t angle = 0; angle <= 180; angle += 10)
+      {
+          setServoAngle(&htim3, TIM_CHANNEL_3, angle);
+          HAL_Delay(100);
+      }
+
+      // Sweep back from 180 to 0 degrees
+      for (uint8_t angle = 180; angle > 0; angle -= 10)
+      {
+          setServoAngle(&htim3, TIM_CHANNEL_3, angle);
+          HAL_Delay(100);
+      }
+
+
+	  //  if(mpuStatus == 1){ mpuStatus = 0;  readMPU();  }
 
   }
   /* USER CODE END 3 */
@@ -236,6 +283,59 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 168-1;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 20000-1;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
 
 }
 
@@ -382,9 +482,9 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin : PE8 */
   GPIO_InitStruct.Pin = GPIO_PIN_8;
