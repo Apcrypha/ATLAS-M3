@@ -29,22 +29,13 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 typedef struct{
-	float aX;		//Accelerometer
+	float aX;		//Accelerometer. Units (g)gravity
 	float aY;
 	float aZ;
 
-	float gX;		//Gyroscope
+	float gX;		//Gyroscope. Units (dps)degrees per second
 	float gY;
 	float gZ;
-
-	//RAW
-	int16_t RAWaX;		//Accelerometer
-	int16_t RAWaY;
-	int16_t RAWaZ;
-
-	int16_t RAWgX;		//Gyroscope
-	int16_t RAWgY;
-	int16_t RAWgZ;
 
 }MPU_data;
 
@@ -80,8 +71,6 @@ HAL_StatusTypeDef status;
 
 volatile uint8_t mpuStatus = 0;
 
-uint32_t periodCount = 1000;
-
 
 /* USER CODE END PV */
 
@@ -96,29 +85,12 @@ static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 void readMPU();
+void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){
-	/*Convert servo pulse time to timer counts
-	 *MCU Frequency = 168MHz
-	 *Prescaler = 167
-	 *Clock tick = 168,000,000 / 167 + 1
-	 *Clock tick = 1uS
-	 *			From Datasheet
-	 *Minimum Counts =  300uS/1uS	  = 300		//0   deg
-	 *Maximum Counts =  1,300uS/1uS	  = 1300	//180 deg
-	*/
-
-	//Map angle (0-180) via linear interpolation
-	uint32_t pulse_length = 300 + (angle * (1300-300)/180);
-
-	__HAL_TIM_SET_COMPARE(htim,channel,pulse_length);
-
-
-}
 
 
 
@@ -160,20 +132,20 @@ int main(void)
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3); //Starts timer for servo l
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4); //Starts timer for servo 2
 
-  //__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_3,10000);
 
-  /*
-  status = MPU6500_Init();
+
+  status = MPU6500_Init();	//Initialize MPU6500
   if(status != HAL_OK){
       Error_Handler();
   }
-  status = MPU6500_EnableDataReadyInterrupts();
+  status = MPU6500_EnableDataReadyInterrupts();	//Enable Interrupt pin
   if(status != HAL_OK){
       Error_Handler();
   }
-  */
+
 
   /* USER CODE END 2 */
 
@@ -189,6 +161,7 @@ int main(void)
 	  for (uint8_t angle = 0; angle <= 180; angle += 10)
       {
           setServoAngle(&htim3, TIM_CHANNEL_3, angle);
+          setServoAngle(&htim3, TIM_CHANNEL_4, angle);
           HAL_Delay(100);
       }
 
@@ -196,11 +169,12 @@ int main(void)
       for (uint8_t angle = 180; angle > 0; angle -= 10)
       {
           setServoAngle(&htim3, TIM_CHANNEL_3, angle);
+          setServoAngle(&htim3, TIM_CHANNEL_4, angle);
           HAL_Delay(100);
       }
 
 
-	  //  if(mpuStatus == 1){ mpuStatus = 0;  readMPU();  }
+	  if(mpuStatus == 1){ mpuStatus = 0;  readMPU();  }
 
   }
   /* USER CODE END 3 */
@@ -503,6 +477,23 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){
+	/*Convert servo pulse time to timer counts
+	 *MCU Frequency = 168MHz
+	 *Prescaler = 167
+	 *Clock tick = 168,000,000 / 167 + 1
+	 *Clock tick = 1uS
+	 *			From Datasheet
+	 *Minimum Counts =  300uS/1uS	  = 300		//0   deg
+	 *Maximum Counts =  1,300uS/1uS	  = 1300	//180 deg
+	*/
+
+	//Map angle (0-180) via linear interpolation
+	uint32_t pulse_length = 300 + (angle * (1300-300)/180);
+
+	__HAL_TIM_SET_COMPARE(htim,channel,pulse_length);	//write duty cycle to PWM
+}
+
 void readMPU(){
 	uint8_t int_status;
 	int16_t accel_x, accel_y, accel_z;
@@ -518,14 +509,6 @@ void readMPU(){
 	status = MPU6500_ReadGyro(&gyro_x, &gyro_y, &gyro_z);
 	if(status != HAL_OK){ Error_Handler();	}
 
-	MPU_Data.RAWaX = accel_x;
-	MPU_Data.RAWaY = accel_y;
-	MPU_Data.RAWaZ = accel_z;
-
-	MPU_Data.RAWgX = gyro_x;
-	MPU_Data.RAWgY = gyro_y;
-	MPU_Data.RAWgZ = gyro_z;
-
 	// Convert raw data to physical units
 	// For ±8g range: 1g = 4096 LSB
 	MPU_Data.aX = accel_x / 4096.0f;
@@ -540,10 +523,9 @@ void readMPU(){
 
 }
 
-
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 	if(GPIO_Pin == GPIO_PIN_8){
-		mpuStatus = 1;
+		mpuStatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
 	}
 }
 
