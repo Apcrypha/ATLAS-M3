@@ -21,6 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+// #include <> is used for system/language specific includes, while "" is used for project specific
+#include <stdbool.h>
 #include "mpu6500.h"
 
 
@@ -72,7 +74,7 @@ UART_HandleTypeDef huart4;
 MPU_data MPU_Data;
 HAL_StatusTypeDef status;
 
-volatile uint8_t mpuStatus = 0;
+volatile bool mpuStatus = false;
 
 
 /* USER CODE END PV */
@@ -91,6 +93,7 @@ static void MX_TIM1_Init(void);
 
 void readMPU();
 void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle);
+void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick, int8_t direction);
 
 /* USER CODE END PFP */
 
@@ -181,7 +184,7 @@ int main(void)
       }
 
 
-	  if(mpuStatus == 1){ mpuStatus = 0;  readMPU();  }
+	  if(mpuStatus){ mpuStatus = false;  readMPU();  }
 
   }
   /* USER CODE END 3 */
@@ -204,12 +207,11 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 4;
   RCC_OscInitStruct.PLL.PLLN = 168;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 4;
@@ -410,6 +412,7 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 0 */
 
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
 
@@ -422,6 +425,15 @@ static void MX_TIM3_Init(void)
   htim3.Init.Period = 20000-1;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
   if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
   {
     Error_Handler();
@@ -593,10 +605,11 @@ static void MX_GPIO_Init(void)
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
@@ -662,6 +675,27 @@ void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){
 	__HAL_TIM_SET_COMPARE(htim,channel,pulse_length);	//write duty cycle to PWM
 }
 
+void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick, int8_t direction){
+
+	uint32_t joystickMax = 4095;				//Max timit of the joystick determined by the bit value of the joystick
+	uint32_t lowerDeadZone = 2045;				//upper limit of the joystick when scrolling below
+	uint32_t higherDeadZone = 2050;				//lower limit of the joystick when scrolling above
+	uint32_t maxTick = 8399;					//set by the 20Khz counter
+
+	uint32_t pulse_length;
+	if (direction == 1){	//forward
+		pulse_length = ((joystick - higherDeadZone)/(joystickMax - higherDeadZone))* maxTick;
+	}
+	else if (direction == -1){	//backward
+		pulse_length = ((lowerDeadZone - joystick)/lowerDeadZone)* maxTick;
+	}
+	else{	//when direction is 0 it means the joystick is within the deadzone so its centered
+		return;
+	}
+	__HAL_TIM_SET_COMPARE(htim,channel,pulse_length);	//write duty cycle to PWM
+}
+
+
 void readMPU(){
 	uint8_t int_status;
 	int16_t accel_x, accel_y, accel_z;
@@ -693,7 +727,7 @@ void readMPU(){
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 	if(GPIO_Pin == GPIO_PIN_8){
-		mpuStatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
+		mpuStatus = true;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
 	}
 }
 
