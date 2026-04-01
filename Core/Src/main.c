@@ -22,7 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 // #include <> is used for system/language specific includes, while "" is used for project specific
-#include <stdbool.h>
+//#include <stdbool.h>
 
 #include "mpu6500.h"
 
@@ -76,9 +76,12 @@ UART_HandleTypeDef huart4;
 MPU_data MPU_Data;
 HAL_StatusTypeDef status;
 
-volatile bool mpuStatus = false;
+volatile uint8_t mpuStatus = 0;
 volatile uint16_t ADC_reading = 0;
 
+uint16_t Angle;
+uint16_t whileADC;
+uint16_t count;
 
 #define bufferSize 4096	// The amount of ADC reading to store
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
@@ -154,7 +157,7 @@ int main(void)
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4); //Starts timer for servo 2
 
 
-
+/*	//disable this when MPU is disconnected because Error_Handler() is a loop.
   status = MPU6500_Init();	//Initialize MPU6500
   if(status != HAL_OK){
       Error_Handler();
@@ -163,14 +166,16 @@ int main(void)
   if(status != HAL_OK){
       Error_Handler();
   }
-
+*/
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+  while (1) {
+	 // count++;
+	  whileADC = ADC_reading;
+	//  HAL_Delay(100);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -180,6 +185,7 @@ int main(void)
       {
           setServoAngle(&htim3, TIM_CHANNEL_3, angle);
           setServoAngle(&htim3, TIM_CHANNEL_4, angle);
+          Angle = angle;
           HAL_Delay(100);
       }
 
@@ -188,10 +194,11 @@ int main(void)
       {
           setServoAngle(&htim3, TIM_CHANNEL_3, angle);
           setServoAngle(&htim3, TIM_CHANNEL_4, angle);
+          Angle = angle;
           HAL_Delay(100);
       }
 
-	  if(mpuStatus){ mpuStatus = false;  readMPU();  }
+	//  if(mpuStatus == 1){ mpuStatus = 0;  readMPU();  }
 */
 
 
@@ -747,15 +754,20 @@ void readMPU(){
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 	if(GPIO_Pin == GPIO_PIN_8){
-		mpuStatus = true;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
+		mpuStatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
 	}
 }
 
 
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) { // Called when ADC buffer is completely filled
-  //HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
-}
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) { // Called when ADC buffer is completely filled}
 
+	uint32_t sum;
+	for (uint16_t i = 0; i <= 4095; i ++)
+	      {
+		sum += ADC_buffer[i];
+	      }
+	ADC_reading = sum/4096;
+}
 /* USER CODE END 4 */
 
 /**
@@ -767,7 +779,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
-   while (1)
+  while (1)
   {
   }
   /* USER CODE END Error_Handler_Debug */
