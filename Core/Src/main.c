@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 // #include <> is used for system/language specific includes, while "" is used for project specific
 #include <stdbool.h>
+
 #include "mpu6500.h"
 
 
@@ -57,6 +58,7 @@ typedef struct{
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
 
 I2C_HandleTypeDef hi2c1;
 
@@ -75,7 +77,11 @@ MPU_data MPU_Data;
 HAL_StatusTypeDef status;
 
 volatile bool mpuStatus = false;
+volatile uint16_t ADC_reading = 0;
 
+
+#define bufferSize 4096	// The amount of ADC reading to store
+uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
 
 /* USER CODE END PV */
 
@@ -142,6 +148,8 @@ int main(void)
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
 
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&ADC_buffer, bufferSize);	//Start the ADC and tell the DMA to where to store the data
+
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3); //Starts timer for servo l
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4); //Starts timer for servo 2
 
@@ -167,7 +175,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-
+/*
 	  for (uint8_t angle = 0; angle <= 180; angle += 10)
       {
           setServoAngle(&htim3, TIM_CHANNEL_3, angle);
@@ -183,8 +191,10 @@ int main(void)
           HAL_Delay(100);
       }
 
-
 	  if(mpuStatus){ mpuStatus = false;  readMPU();  }
+*/
+
+
 
   }
   /* USER CODE END 3 */
@@ -250,6 +260,13 @@ static void MX_ADC1_Init(void)
   ADC_ChannelConfTypeDef sConfig = {0};
 
   /* USER CODE BEGIN ADC1_Init 1 */
+/* The hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV6;
+ * -> this determines the sampling rate where the APB2 is divided by the prescaler
+ *
+ *  sConfig.SamplingTime = ADC_SAMPLETIME_15CYCLES;
+ *  -> this determins how many cycles the ADC looks before storeing the data for more stable reading
+ */
+
 
   /* USER CODE END ADC1_Init 1 */
 
@@ -259,13 +276,13 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
   hadc1.Init.ScanConvMode = DISABLE;
-  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.ContinuousConvMode = ENABLE;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc1.Init.NbrOfConversion = 1;
-  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.DMAContinuousRequests = ENABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
@@ -276,7 +293,7 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_6;
   sConfig.Rank = 1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  sConfig.SamplingTime = ADC_SAMPLETIME_15CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -575,6 +592,7 @@ static void MX_DMA_Init(void)
 
   /* DMA controller clock enable */
   __HAL_RCC_DMA1_CLK_ENABLE();
+  __HAL_RCC_DMA2_CLK_ENABLE();
 
   /* DMA interrupt init */
   /* DMA1_Stream0_IRQn interrupt configuration */
@@ -589,6 +607,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Stream4_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream4_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream4_IRQn);
+  /* DMA2_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 
 }
 
@@ -695,7 +716,6 @@ void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick, int8
 	__HAL_TIM_SET_COMPARE(htim,channel,pulse_length);	//write duty cycle to PWM
 }
 
-
 void readMPU(){
 	uint8_t int_status;
 	int16_t accel_x, accel_y, accel_z;
@@ -731,6 +751,10 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 	}
 }
 
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) { // Called when ADC buffer is completely filled
+  //HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+}
 
 /* USER CODE END 4 */
 
