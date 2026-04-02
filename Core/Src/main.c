@@ -1,20 +1,11 @@
 /* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2026 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+/* INTRO
+
+
+
+*/
+
+
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -31,7 +22,7 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef struct{
+typedef struct{//MPU struct
 	float aX;		//Accelerometer. Units (g)gravity
 	float aY;
 	float aZ;
@@ -78,11 +69,11 @@ UART_HandleTypeDef huart4;
 MPU_data MPU_Data;
 HAL_StatusTypeDef status;
 
+float batPercentage = 0.00f;
+
 volatile uint8_t mpuStatus = 0;
 volatile uint16_t ADC_reading = 0;
 
-uint16_t Angle;
-uint16_t whileADC;
 uint16_t count;
 
 #define bufferSize 4096	// The amount of ADC reading to store
@@ -106,6 +97,8 @@ static void MX_RTC_Init(void);
 void readMPU();
 void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle);
 void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick, int8_t direction);
+void readBattery();
+
 
 /* USER CODE END PFP */
 
@@ -157,6 +150,8 @@ int main(void)
 
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&ADC_buffer, bufferSize);	//Start the ADC and tell the DMA to where to store the data
 
+  HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 10240, RTC_WAKEUPCLOCK_RTCCLK_DIV16);	//Start the LSE Timer
+
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3); //Starts timer for servo l
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4); //Starts timer for servo 2
 
@@ -177,9 +172,6 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1) {
-	 // count++;
-	  whileADC = ADC_reading;
-	//  HAL_Delay(100);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -305,7 +297,7 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_6;
   sConfig.Rank = 1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_15CYCLES;
+  sConfig.SamplingTime = ADC_SAMPLETIME_144CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -404,6 +396,13 @@ static void MX_RTC_Init(void)
   sDate.Year = 0x0;
 
   if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BCD) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Enable the WakeUp
+  */
+  if (HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 10240, RTC_WAKEUPCLOCK_RTCCLK_DIV16) != HAL_OK)
   {
     Error_Handler();
   }
@@ -820,14 +819,45 @@ void readMPU(){
 
 }
 
+void readBattery(){//Converts ADC to battery percentage
+	float maxVoltage = 3.029508;	//Max voltage of the Voltage divider
+	float minVoltage = 2.163934;
+
+	//This can change depending on the ADC reading of the Voltage Divider
+	uint16_t maxADC = 4095;
+	uint16_t minADC = 0;
+
+	//linear Interpolation to convert ADC to Voltage reading
+	float readingVoltage = ( ((float) (ADC_reading - minADC) * (maxVoltage - minVoltage) ) / (maxADC - minADC) ) + minVoltage;
+
+	//Convert to battery percentage
+	batPercentage = ( (readingVoltage - minVoltage) * 100 ) / (maxVoltage - minVoltage);
+
+}
+
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 	if(GPIO_Pin == GPIO_PIN_8){
 		mpuStatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
 	}
 }
 
+void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){//LSE Timer ISR
+count++;
+readBattery();
+
+}
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) { // Called when ADC buffer is completely filled}
+/*
+ * Sampling time is calculated by:
+ *
+ * ADC clock = APB2 / prescaler		--> 84MHz / 4 = 21MHz
+ * Conversion time = Sampling time + Conversion time for bits(12.5 cycles for 12bit)	--> 144 Cycles + 12.5 Cycles = 156.5 Cycles
+ * Cycle = 1 / ADC clock	--> 1 / 21MHz = 47.619ns
+ * Sampling time = Conversion time * Cycle		-->	47.619ns * 156.5 cycles	= 7.452us per sample
+ *
+ * Make sure that an ISR is always below 50% time than the interrupt
+ */
 
 	uint32_t sum;
 	for (uint16_t i = 0; i <= 4095; i ++)
