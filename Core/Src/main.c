@@ -75,6 +75,7 @@ volatile uint8_t mpuStatus = 0;
 volatile uint16_t ADC_reading = 0;
 
 uint16_t count;
+uint16_t Angle;
 
 #define bufferSize 4096	// The amount of ADC reading to store
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
@@ -96,7 +97,7 @@ static void MX_RTC_Init(void);
 
 void readMPU();
 void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle);
-void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick, int8_t direction);
+void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick);
 void readBattery();
 
 
@@ -152,11 +153,16 @@ int main(void)
 
   HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 10240, RTC_WAKEUPCLOCK_RTCCLK_DIV16);	//Start the LSE Timer
 
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3); //Starts timer for servo l
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4); //Starts timer for servo 2
+  //Starts timer for motor driver
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
+
+  //Starts timer for servo
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
 
 
-/*	//disable this when MPU is disconnected because Error_Handler() is a loop.
+/*	//disable this when MPU is disconnected because Error_Handler() causes a loop.
   status = MPU6500_Init();	//Initialize MPU6500
   if(status != HAL_OK){
       Error_Handler();
@@ -194,8 +200,12 @@ int main(void)
           HAL_Delay(100);
       }
 
+	//	setSpeed(&htim1, TIM_CHANNEL_3, ADC_reading);
+	//  HAL_Delay(100);
 	//  if(mpuStatus == 1){ mpuStatus = 0;  readMPU();  }
 */
+
+
 
 
 
@@ -770,19 +780,21 @@ void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){
 	__HAL_TIM_SET_COMPARE(htim,channel,pulse_length);	//write duty cycle to PWM
 }
 
-void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick, int8_t direction){
-
+void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick){
 	uint32_t joystickMax = 4095;				//Max timit of the joystick determined by the bit value of the joystick
 	uint32_t lowerDeadZone = 2045;				//upper limit of the joystick when scrolling below
 	uint32_t higherDeadZone = 2050;				//lower limit of the joystick when scrolling above
 	uint32_t maxTick = 8399;					//set by the 20Khz counter
 
+	//This is called ternary operation to check simple conditions
+	int8_t direction = (joystick > higherDeadZone) ? 1 : (joystick < lowerDeadZone) ? -1 : 0;
+
 	uint32_t pulse_length;
 	if (direction == 1){	//forward
-		pulse_length = ((joystick - higherDeadZone)/(joystickMax - higherDeadZone))* maxTick;
+		pulse_length = ((joystick - higherDeadZone) * maxTick) / (joystickMax - higherDeadZone);
 	}
 	else if (direction == -1){	//backward
-		pulse_length = ((lowerDeadZone - joystick)/lowerDeadZone)* maxTick;
+		pulse_length = ((lowerDeadZone - joystick) * maxTick) / lowerDeadZone;
 	}
 	else{	//when direction is 0 it means the joystick is within the deadzone so its centered
 		return;
@@ -842,8 +854,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 }
 
 void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){//LSE Timer ISR
-count++;
-readBattery();
+	readBattery();
 
 }
 
