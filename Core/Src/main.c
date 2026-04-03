@@ -80,7 +80,7 @@ float batPercentage = 0.00f;
 
 volatile uint8_t mpuStatus = 0;
 volatile uint16_t ADC_reading = 0;
-volatile uint16_t velocity = 0;
+volatile uint16_t velocity = 0;	//velocity is in pulse length for pwm
 
 uint16_t count;
 uint16_t Angle;
@@ -849,17 +849,31 @@ void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick){
 	//This is called ternary operation to check simple conditions
 	int8_t direction = (joystick > higherDeadZone) ? 1 : (joystick < lowerDeadZone) ? -1 : 0;
 
-	uint32_t pulse_length;
+	float V_target;
 	if (direction == 1){	//forward
-		pulse_length = ((joystick - higherDeadZone) * maxTick) / (joystickMax - higherDeadZone);
+		V_target = ((joystick - higherDeadZone) * maxTick) / (joystickMax - higherDeadZone);
 	}
 	else if (direction == -1){	//backward
-		pulse_length = ((lowerDeadZone - joystick) * maxTick) / lowerDeadZone;
+		V_target = ((lowerDeadZone - joystick) * maxTick) / lowerDeadZone;
 	}
 	else{	//when direction is 0 it means the joystick is within the deadzone so its centered
+		velocity = 1;	//goes error when timer becomes 0
+		__HAL_TIM_SET_COMPARE(htim,channel,velocity);
 		return;
 	}
-	__HAL_TIM_SET_COMPARE(htim,channel,pulse_length);	//write duty cycle to PWM
+
+	float dt = 0.005f; // 5ms
+
+	float error = V_target - velocity;
+
+	float k = 30.0f;	//determines how fast the correction changes
+
+	float acceleration = k * error;
+
+	velocity += acceleration * dt;
+
+
+	__HAL_TIM_SET_COMPARE(htim,channel,velocity);	//write duty cycle to PWM
 }
 
 void normalizeSpeed(){
@@ -941,21 +955,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {	// Called when ADC buff
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called whenever there is an overflow on any timer
     if (htim->Instance == TIM4){	//Checks if timer overflow is Timer 4
        //ISR every 5ms
-    	float dt = 0.005f; // 5ms
-
-    	float V_target = ((float)ADC_reading / 4095.0f) * 8399.0f;
-
-    	float error = V_target - velocity;
-
-    	float k = 30.0f;
-
-    	float acceleration = k * error;
-
-    	velocity += acceleration * dt;
-
-    	// Clamp to valid range
-    	//if (velocity > 8399) velocity = 8399;
-    	//if (velocity < 0) velocity = 0;
+    	setSpeed(&htim1, TIM_CHANNEL_3, ADC_reading);
 
     }
 }
