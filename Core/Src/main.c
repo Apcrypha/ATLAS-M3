@@ -13,8 +13,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 // #include <> is used for system/language specific includes, while "" is used for project specific
-//#include <stdbool.h>
-
+#include <math.h>
 #include "mpu6500.h"
 
 
@@ -32,6 +31,12 @@ typedef struct{//MPU struct
 	float gZ;
 
 }MPU_data;
+
+typedef struct{ //Joystic values for the Ground vehicle
+	uint16_t Jx;
+	uint16_t Jy;
+
+}UGV_controls;
 
 
 /* USER CODE END PTD */
@@ -57,6 +62,7 @@ RTC_HandleTypeDef hrtc;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim5;
 DMA_HandleTypeDef hdma_tim5_ch1;
 DMA_HandleTypeDef hdma_tim5_ch2;
@@ -67,18 +73,21 @@ UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
 MPU_data MPU_Data;
+UGV_controls UGV_Controls;
 HAL_StatusTypeDef status;
 
 float batPercentage = 0.00f;
 
 volatile uint8_t mpuStatus = 0;
 volatile uint16_t ADC_reading = 0;
+volatile uint16_t velocity = 0;
 
 uint16_t count;
 uint16_t Angle;
 
 #define bufferSize 4096	// The amount of ADC reading to store
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
+
 
 /* USER CODE END PV */
 
@@ -93,12 +102,14 @@ static void MX_TIM3_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_RTC_Init(void);
+static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 
 void readMPU();
 void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle);
 void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick);
 void readBattery();
+void normalizeSpeed();
 
 
 /* USER CODE END PFP */
@@ -147,19 +158,23 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM1_Init();
   MX_RTC_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&ADC_buffer, bufferSize);	//Start the ADC and tell the DMA to where to store the data
 
   HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 10240, RTC_WAKEUPCLOCK_RTCCLK_DIV16);	//Start the LSE Timer
 
+  //Start timer 4
+  HAL_TIM_Base_Start_IT(&htim4);
+
   //Starts timer for motor driver
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
+ // HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+ // HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
 
   //Starts timer for servo
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+ // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+ // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
 
 
 /*	//disable this when MPU is disconnected because Error_Handler() causes a loop.
@@ -565,6 +580,51 @@ static void MX_TIM3_Init(void)
 }
 
 /**
+  * @brief TIM4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+
+  /* USER CODE BEGIN TIM4_Init 0 */
+
+  /* USER CODE END TIM4_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM4_Init 1 */
+
+  /* USER CODE END TIM4_Init 1 */
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 168-1;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 5000;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM4_Init 2 */
+
+  /* USER CODE END TIM4_Init 2 */
+
+}
+
+/**
   * @brief TIM5 Initialization Function
   * @param None
   * @retval None
@@ -802,6 +862,11 @@ void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick){
 	__HAL_TIM_SET_COMPARE(htim,channel,pulse_length);	//write duty cycle to PWM
 }
 
+void normalizeSpeed(){
+
+
+}
+
 void readMPU(){
 	uint8_t int_status;
 	int16_t accel_x, accel_y, accel_z;
@@ -847,18 +912,13 @@ void readBattery(){//Converts ADC to battery percentage
 
 }
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
-	if(GPIO_Pin == GPIO_PIN_8){
-		mpuStatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
-	}
-}
-
-void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){//LSE Timer ISR
+//--------------------------------------------- ISR Functions---------------------------------
+void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){	//LSE Timer ISR
 	readBattery();
 
 }
 
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) { // Called when ADC buffer is completely filled}
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {	// Called when ADC buffer is completely filled}
 /*
  * Sampling time is calculated by:
  *
@@ -877,6 +937,36 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) { // Called when ADC buff
 	      }
 	ADC_reading = sum/4096;
 }
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called whenever there is an overflow on any timer
+    if (htim->Instance == TIM4){	//Checks if timer overflow is Timer 4
+       //ISR every 5ms
+    	float dt = 0.005f; // 5ms
+
+    	float V_target = ((float)ADC_reading / 4095.0f) * 8399.0f;
+
+    	float error = V_target - velocity;
+
+    	float k = 30.0f;
+
+    	float acceleration = k * error;
+
+    	velocity += acceleration * dt;
+
+    	// Clamp to valid range
+    	//if (velocity > 8399) velocity = 8399;
+    	//if (velocity < 0) velocity = 0;
+
+    }
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){	//EXTI ISR
+	if(GPIO_Pin == GPIO_PIN_8){
+		mpuStatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
+	}
+}
+
+
 /* USER CODE END 4 */
 
 /**
