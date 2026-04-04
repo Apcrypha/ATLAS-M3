@@ -56,13 +56,13 @@ typedef struct{//MPU struct
 }MPU_data;
 
 typedef struct{ //Joystick values for the Ground vehicle
-	//Joystick values must already be normalized
+	//Joystick values must already be normalized where 0 is centred -n is backward and vice versa
 
-	uint16_t Jx;
-	uint16_t Jy;
+	int16_t Jx;
+	int16_t Jy;
 
-	int8_t JxDir;	//+1 means Right turn; -1 means Left turn; 0 means not moving
-	int8_t JyDir;	//+1 means Forward; -1 means Backward; 0 means not moving
+//	int8_t JxDir;	//+1 means Right turn; -1 means Left turn; 0 means not moving
+//	int8_t JyDir;	//+1 means Forward; -1 means Backward; 0 means not moving
 
 }UGV_controls;
 
@@ -108,13 +108,18 @@ float batPercentage = 0.00f;
 
 volatile uint8_t mpuStatus = 0;
 volatile uint16_t ADC_reading = 0;
-volatile uint16_t velocityTick = 0;				//velocity is in pulse length for pwm
+int16_t leftMotor = 0;
+int16_t rightMotor = 0;
 
-uint32_t maxUGV_Tick = 8399;					//set by the 20Khz counter
+
+uint16_t Right_velocityTick = 0;						//velocity is in pulse length for pwm
+uint16_t Left_velocityTick = 0;
+
 
 uint16_t count;
 uint16_t Angle;
 
+#define maxUGV_Tick 8399								//set by the 20Khz counter
 #define bufferSize 4096	// The amount of ADC reading to store
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
 
@@ -123,11 +128,10 @@ uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
 /*All these Variables are changed only depending on the modular configuration*/
 
 //For the controller
-uint16_t maxJoystick = 2047;	//Normalized range. Only supports up to 16bit but can be changed in the future
-uint16_t minJoystick = 0;
+uint16_t rangeJoystick = 2047;	//Normalized ± range. Only supports up to 16bit but can be changed in the future
 
 //For UGV
-float UGV_k;	//Multiplier constant of the UGV
+float UGV_k = 30.0f;	//Multiplier constant of the UGV
 
 /* USER CODE END PV */
 
@@ -147,7 +151,8 @@ static void MX_TIM4_Init(void);
 
 void readMPU();
 void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle);
-void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t V_target);
+void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel,uint16_t motor, uint16_t *velocityTick);
+void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B, uint16_t Pin_B, int16_t *motor);
 void readBattery();
 
 /* USER CODE END PFP */
@@ -878,21 +883,45 @@ void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){
 	__HAL_TIM_SET_COMPARE(htim,channel,pulse_length);	//write duty cycle to PWM
 }
 
-void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t V_target){
+void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel,uint16_t motor, uint16_t *velocityTick){
+
+	uint16_t V_target = (motor/rangeJoystick) * maxUGV_Tick;
 
 	float dt = 0.005f; // 5ms. This is how fast the speed changes
 
-	float error = V_target - velocityTick;
+	float error = V_target - *velocityTick;
 
-	UGV_k = 30.0f;	//determines how fast the correction changes
+	//UGV_k = 30.0f -> determines how fast the correction changes
 
 	float acceleration = UGV_k * error;
 
-	velocityTick += acceleration * dt;
+	*velocityTick += acceleration * dt;
 
-	__HAL_TIM_SET_COMPARE(htim,channel,velocityTick);	//write duty cycle to PWM
+	if (*velocityTick <=1) *velocityTick = 1;
+	__HAL_TIM_SET_COMPARE(htim,channel, *velocityTick);	//write duty cycle to PWM
 }
 
+void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B, uint16_t Pin_B, int16_t *motor)
+{
+    if (*motor > 0) {
+        HAL_GPIO_WritePin(Port_A, Pin_A, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(Port_B, Pin_B, GPIO_PIN_RESET);
+
+    } else if (*motor < 0) {
+        HAL_GPIO_WritePin(Port_A, Pin_A, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(Port_B, Pin_B, GPIO_PIN_SET);
+    } else {
+        HAL_GPIO_WritePin(Port_A, Pin_A, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(Port_B, Pin_B, GPIO_PIN_RESET);
+    }
+
+    // Absolute the value
+    if (*motor < 0)*motor = -(*motor);
+
+    //Clip the value to rangeJoystick
+    if (*motor > rangeJoystick) *motor = rangeJoystick;
+
+}
 
 void readMPU(){
 	uint8_t int_status;
@@ -968,8 +997,14 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {	// Called when ADC buff
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called whenever there is an overflow on any timer
     if (htim->Instance == TIM4){	//Checks if timer overflow is Timer 4
        //ISR every 5ms
-    	setSpeed(&htim1, TIM_CHANNEL_3, UGV_Controls.Jx);
-    	setSpeed(&htim1, TIM_CHANNEL_4, UGV_Controls.Jy);
+    	leftMotor = UGV_Controls.Jy + UGV_Controls.Jx;
+    	rightMotor = UGV_Controls.Jy - UGV_Controls.Jx;
+
+    	UGV_setDirection(GPIOC, GPIO_PIN_6, GPIOA, GPIO_PIN_7, &leftMotor);
+    	UGV_setDirection(GPIOE, GPIO_PIN_11, GPIOE, GPIO_PIN_9, &rightMotor);
+
+    	UGV_setSpeed(&htim1, TIM_CHANNEL_3, leftMotor, &Left_velocityTick);
+    	UGV_setSpeed(&htim1, TIM_CHANNEL_4, rightMotor, &Right_velocityTick);
 
     }
 }
