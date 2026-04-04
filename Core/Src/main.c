@@ -1,9 +1,32 @@
 /* USER CODE BEGIN Header */
-/* INTRO
+/* Codes that might be reused later
+ *
+ *
+	uint32_t joystickMax = 4095;				//Max timit of the joystick determined by the bit value of the joystick
+	uint32_t lowerDeadZone = 2045;				//upper limit of the joystick when scrolling below
+	uint32_t higherDeadZone = 2050;				//lower limit of the joystick when scrolling above
 
+	//This is called ternary operation to check simple conditions
+	int8_t direction = (joystick > higherDeadZone) ? 1 : (joystick < lowerDeadZone) ? -1 : 0;
 
-
-*/
+	float V_target;
+	if (direction == 1){	//forward
+		V_target = ((joystick - higherDeadZone) * maxTick) / (joystickMax - higherDeadZone);
+	}
+	else if (direction == -1){	//backward
+		V_target = ((lowerDeadZone - joystick) * maxTick) / lowerDeadZone;
+	}
+	else{	//when direction is 0 it means the joystick is within the deadzone so its centered
+		velocity = 1;	//goes error when timer becomes 0
+		__HAL_TIM_SET_COMPARE(htim,channel,velocity);
+		return;
+	}
+ *
+ *
+ *
+ *
+ *
+ */
 
 
 /* USER CODE END Header */
@@ -32,9 +55,14 @@ typedef struct{//MPU struct
 
 }MPU_data;
 
-typedef struct{ //Joystic values for the Ground vehicle
+typedef struct{ //Joystick values for the Ground vehicle
+	//Joystick values must already be normalized
+
 	uint16_t Jx;
 	uint16_t Jy;
+
+	int8_t JxDir;	//+1 means Right turn; -1 means Left turn; 0 means not moving
+	int8_t JyDir;	//+1 means Forward; -1 means Backward; 0 means not moving
 
 }UGV_controls;
 
@@ -80,7 +108,9 @@ float batPercentage = 0.00f;
 
 volatile uint8_t mpuStatus = 0;
 volatile uint16_t ADC_reading = 0;
-volatile uint16_t velocity = 0;	//velocity is in pulse length for pwm
+volatile uint16_t velocityTick = 0;				//velocity is in pulse length for pwm
+
+uint32_t maxUGV_Tick = 8399;					//set by the 20Khz counter
 
 uint16_t count;
 uint16_t Angle;
@@ -88,6 +118,16 @@ uint16_t Angle;
 #define bufferSize 4096	// The amount of ADC reading to store
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
 
+
+/*----------------------------------------------------Vehicle settings---------------------------*/
+/*All these Variables are changed only depending on the modular configuration*/
+
+//For the controller
+uint16_t maxJoystick = 2047;	//Normalized range. Only supports up to 16bit but can be changed in the future
+uint16_t minJoystick = 0;
+
+//For UGV
+float UGV_k;	//Multiplier constant of the UGV
 
 /* USER CODE END PV */
 
@@ -107,10 +147,8 @@ static void MX_TIM4_Init(void);
 
 void readMPU();
 void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle);
-void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick);
+void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t V_target);
 void readBattery();
-void normalizeSpeed();
-
 
 /* USER CODE END PFP */
 
@@ -840,46 +878,21 @@ void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){
 	__HAL_TIM_SET_COMPARE(htim,channel,pulse_length);	//write duty cycle to PWM
 }
 
-void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t joystick){
-	uint32_t joystickMax = 4095;				//Max timit of the joystick determined by the bit value of the joystick
-	uint32_t lowerDeadZone = 2045;				//upper limit of the joystick when scrolling below
-	uint32_t higherDeadZone = 2050;				//lower limit of the joystick when scrolling above
-	uint32_t maxTick = 8399;					//set by the 20Khz counter
+void setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t V_target){
 
-	//This is called ternary operation to check simple conditions
-	int8_t direction = (joystick > higherDeadZone) ? 1 : (joystick < lowerDeadZone) ? -1 : 0;
+	float dt = 0.005f; // 5ms. This is how fast the speed changes
 
-	float V_target;
-	if (direction == 1){	//forward
-		V_target = ((joystick - higherDeadZone) * maxTick) / (joystickMax - higherDeadZone);
-	}
-	else if (direction == -1){	//backward
-		V_target = ((lowerDeadZone - joystick) * maxTick) / lowerDeadZone;
-	}
-	else{	//when direction is 0 it means the joystick is within the deadzone so its centered
-		velocity = 1;	//goes error when timer becomes 0
-		__HAL_TIM_SET_COMPARE(htim,channel,velocity);
-		return;
-	}
+	float error = V_target - velocityTick;
 
-	float dt = 0.005f; // 5ms
+	UGV_k = 30.0f;	//determines how fast the correction changes
 
-	float error = V_target - velocity;
+	float acceleration = UGV_k * error;
 
-	float k = 30.0f;	//determines how fast the correction changes
+	velocityTick += acceleration * dt;
 
-	float acceleration = k * error;
-
-	velocity += acceleration * dt;
-
-
-	__HAL_TIM_SET_COMPARE(htim,channel,velocity);	//write duty cycle to PWM
+	__HAL_TIM_SET_COMPARE(htim,channel,velocityTick);	//write duty cycle to PWM
 }
 
-void normalizeSpeed(){
-
-
-}
 
 void readMPU(){
 	uint8_t int_status;
@@ -955,7 +968,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {	// Called when ADC buff
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called whenever there is an overflow on any timer
     if (htim->Instance == TIM4){	//Checks if timer overflow is Timer 4
        //ISR every 5ms
-    	setSpeed(&htim1, TIM_CHANNEL_3, ADC_reading);
+    	setSpeed(&htim1, TIM_CHANNEL_3, UGV_Controls.Jx);
+    	setSpeed(&htim1, TIM_CHANNEL_4, UGV_Controls.Jy);
 
     }
 }
