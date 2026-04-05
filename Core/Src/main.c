@@ -212,15 +212,15 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim4);
 
   //Starts timer for motor driver
- // HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
- // HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
 
   //Starts timer for servo
- // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
- // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
 
 
-/*	//disable this when MPU is disconnected because Error_Handler() causes a loop.
+	//disable this when MPU is disconnected because Error_Handler() causes a loop.
   status = MPU6500_Init();	//Initialize MPU6500
   if(status != HAL_OK){
       Error_Handler();
@@ -229,7 +229,7 @@ int main(void)
   if(status != HAL_OK){
       Error_Handler();
   }
-*/
+
 
   /* USER CODE END 2 */
 
@@ -240,7 +240,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-/*
+
 	  for (uint8_t angle = 0; angle <= 180; angle += 10)
       {
           setServoAngle(&htim3, TIM_CHANNEL_3, angle);
@@ -257,14 +257,7 @@ int main(void)
           Angle = angle;
           HAL_Delay(100);
       }
-
-	//	setSpeed(&htim1, TIM_CHANNEL_3, ADC_reading);
-	//  HAL_Delay(100);
-	//  if(mpuStatus == 1){ mpuStatus = 0;  readMPU();  }
-*/
-
-
-
+      if(mpuStatus == 1){ mpuStatus = 0;  readMPU();  }
 
 
   }
