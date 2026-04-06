@@ -930,6 +930,12 @@ void readBattery(){//Converts ADC to battery percentage
 
 void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel,uint16_t motor, int16_t *V_target, uint16_t *V_current){
 
+	/*
+	  The equation used is discrete proportional (P) controller where:
+	  c(t) = k * e(t) * dt + b
+
+	*/
+
 	float dt = 0.005f; // 5ms. This is how fast the speed changes
 
 	float error = *V_target - *V_current;
@@ -938,9 +944,8 @@ void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel,uint16_t motor, int1
 
 	float acceleration = UGV_k * error;
 
-	*V_current += acceleration * dt;
+	*V_current += acceleration * dt + 2; //2 is used as a bias to prevent a zero timer
 
-	if (*V_current <= 2) *V_current = 2;	//Clamp to 2 because Timer cant handle 0 tick and 2 is for margin of error
 	__HAL_TIM_SET_COMPARE(htim,channel, *V_current);	//write duty cycle to PWM
 }
 
