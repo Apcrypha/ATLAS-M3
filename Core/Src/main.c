@@ -66,6 +66,13 @@ typedef struct{ //Joystick values for the Ground vehicle
 
 }UGV_controls;
 
+typedef struct{
+	uint8_t cameraAngle_X;
+	uint8_t cameraAngle_Y;
+
+	uint8_t cameraMove;		//Functions as a software interrupt. Only when this becomes 1 does the moveServo() run
+
+}Camera_angle;
 
 /* USER CODE END PTD */
 
@@ -157,9 +164,13 @@ static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 
 void readMPU();
+
+void moveServo();
 void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle);
+
 void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel,uint16_t motor, int16_t *V_target, uint16_t *V_current);
 void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B, uint16_t Pin_B, int8_t *direction);
+
 void readBattery();
 
 /* USER CODE END PFP */
@@ -866,6 +877,10 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+void moveServo(){
+
+}
+
 void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){
 	/*Convert servo pulse time to timer counts
 	 *MCU Frequency = 168MHz
@@ -968,7 +983,9 @@ void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B
 
 //--------------------------------------------- ISR Functions---------------------------------
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called whenever there is an overflow on any timer
-    if (htim->Instance == TIM4){	//Checks if timer overflow is Timer 4
+
+	//change this use the millis() equivalent of esp32
+	if (htim->Instance == TIM4){	//Checks if timer overflow is Timer 4
        //ISR every 5ms
 
     	UGV_setDirection(GPIOC, GPIO_PIN_6, GPIOA, GPIO_PIN_7, &UGV_Controls.leftMotor_Dir);
