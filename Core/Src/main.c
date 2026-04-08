@@ -71,6 +71,12 @@ typedef struct{ //Joystick values for the Ground vehicle
 
 }UGV_controls;
 
+typedef struct{	//Parameters to be sent by the ELRS
+	int16_t batteryPercentage;
+
+}ELRS_data;
+
+
 
 /* USER CODE END PTD */
 
@@ -107,7 +113,9 @@ UART_HandleTypeDef huart4;
 /* USER CODE BEGIN PV */
 MPU_data MPU_Data;
 UGV_controls UGV_Controls;
+ELRS_data ELRS_Data;
 HAL_StatusTypeDef status;
+
 
 float batPercentage = 0.00f;
 
@@ -127,8 +135,8 @@ uint16_t Angle;
 #define bufferSize 4096	// The amount of ADC reading to store
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
 
-uint8_t ELRS_buffer[26];	//The ELRS raw bits will be saved here
-
+uint8_t ELRS_buffer[26];	//Received ELRS raw bits will be saved here
+uint8_t ELRS_packet[26];	//Sent ELRS raw bits will be saved here
 
 
 
@@ -171,6 +179,14 @@ void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle);
 
 void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel,uint16_t motor, int16_t *V_target, uint16_t *V_current);
 void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B, uint16_t Pin_B, int8_t *direction);
+
+void CRSF_Parser(uint8_t* packet, ELRS_data* input);
+void extractELRS(uint8_t* buf, uint16_t* ch);
+int ELRS_mapper(int Input, int minInput, int maxInput);
+uint8_t crsf_crc8(uint8_t *ptr, uint8_t len);
+
+
+
 
 void readBattery();
 
@@ -278,6 +294,7 @@ int main(void)
       }
       if(mpuStatus == 1){ mpuStatus = 0;  readMPU();  }
 
+      CRSF_Parser(ELRS_packet, &ELRS_Data);
 
   }
   /* USER CODE END 3 */
@@ -1004,6 +1021,68 @@ void extractELRS(uint8_t* buf, uint16_t* ch) {//Extracts the raw ELRS bits to va
     ch[15] = ((uint16_t)buf[23] >> 5 | (uint16_t)buf[24] << 3)                      & 0x07FF;
 }
 
+
+int ELRS_mapper(int Input, int minInput, int maxInput){	//Maps values into ELRS ready
+	return ((Input - minInput) * (1811 - 172) / (maxInput - minInput)) + 172;
+}
+
+uint8_t crsf_crc8(uint8_t *ptr, uint8_t len) {//Compute CRC for ELRS
+    uint8_t crc = 0;
+    for (uint8_t i = 0; i < len; i++) {
+        crc ^= ptr[i];
+        for (uint8_t j = 0; j < 8; j++) {
+            if (crc & 0x80) crc = (crc << 1) ^ 0xD5;
+            else crc <<= 1;
+        }
+    }
+    return crc;
+}
+
+
+void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
+    uint16_t ch[16];
+
+    // --- MAPPING ---
+    // Directly assign if they are already in 172-1811 range
+    ch[0] = input->batteryPercentage;
+
+
+    // Fill unused channels with center value (992)
+    for(int i = 5; i < 16; i++) ch[i] = 992;
+
+    // --- STEP 2: PACKET HEADER ---
+    packet[0] = 0xEE; // Address
+    packet[1] = 24;   // Length
+    packet[2] = 0x16; // Type (RC Channels)
+
+    // --- BIT-PACKING (The 11-bit Squeeze) ---
+    // This part never changes, even if struct changes
+    packet[3]  = (uint8_t)(ch[0] & 0x07FF);
+    packet[4]  = (uint8_t)((ch[0] >> 8) | (ch[1] << 3));
+    packet[5]  = (uint8_t)((ch[1] >> 5) | (ch[2] << 6));
+    packet[6]  = (uint8_t)(ch[2] >> 2);
+    packet[7]  = (uint8_t)((ch[2] >> 10) | (ch[3] << 1));
+    packet[8]  = (uint8_t)((ch[3] >> 7) | (ch[4] << 4));
+    packet[9]  = (uint8_t)((ch[4] >> 4) | (ch[5] << 7));
+    packet[10] = (uint8_t)(ch[5] >> 1);
+    packet[11] = (uint8_t)((ch[5] >> 9) | (ch[6] << 2));
+    packet[12] = (uint8_t)((ch[6] >> 6) | (ch[7] << 5));
+    packet[13] = (uint8_t)(ch[7] >> 3);
+    packet[14] = (uint8_t)(ch[8] & 0x07FF);
+    packet[15] = (uint8_t)((ch[8] >> 8) | (ch[9] << 3));
+    packet[16] = (uint8_t)((ch[9] >> 5) | (ch[10] << 6));
+    packet[17] = (uint8_t)(ch[10] >> 2);
+    packet[18] = (uint8_t)((ch[10] >> 10) | (ch[11] << 1));
+    packet[19] = (uint8_t)((ch[11] >> 7) | (ch[12] << 4));
+    packet[20] = (uint8_t)((ch[12] >> 4) | (ch[13] << 7));
+    packet[21] = (uint8_t)(ch[13] >> 1);
+    packet[22] = (uint8_t)((ch[13] >> 9) | (ch[14] << 2));
+    packet[23] = (uint8_t)((ch[14] >> 6) | (ch[15] << 5));
+    packet[24] = (uint8_t)(ch[15] >> 3);
+
+    // --- CRC Calculation---
+    packet[25] = crsf_crc8(&packet[2], 23);
+}
 
 
 //--------------------------------------------- ISR Functions---------------------------------
