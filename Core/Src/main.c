@@ -138,6 +138,10 @@ uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
 uint8_t ELRS_buffer[26];	//Received ELRS raw bits will be saved here
 uint8_t ELRS_packet[26];	//Sent ELRS raw bits will be saved here
 
+uint8_t rx_byte;              // Holds the single byte currently arriving
+uint8_t rx_index = 0;         // Tracks where we are in the packet
+
+uint8_t channels[16];		//Temporary stores channel values here when receiving
 
 
 /*---------------------------------------------------------------------Modular settings------------------------------------------------*/
@@ -253,6 +257,9 @@ int main(void)
   //Starts timer for servo
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+
+  //Start UART for ELRS
+  HAL_UART_Receive_IT(&huart4, &rx_byte, 1);
 
 
 	//disable this when MPU is disconnected because Error_Handler() causes a loop.
@@ -783,7 +790,7 @@ static void MX_UART4_Init(void)
 
   /* USER CODE END UART4_Init 1 */
   huart4.Instance = UART4;
-  huart4.Init.BaudRate = 115200;
+  huart4.Init.BaudRate = 420000;
   huart4.Init.WordLength = UART_WORDLENGTH_8B;
   huart4.Init.StopBits = UART_STOPBITS_1;
   huart4.Init.Parity = UART_PARITY_NONE;
@@ -1086,6 +1093,41 @@ void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
 
 
 //--------------------------------------------- ISR Functions---------------------------------
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//ISR when UART receives something
+    if (huart->Instance == UART4) {//checks if UART4
+        ELRS_buffer[rx_index++] = rx_byte;
+
+        // 1. Check for Sync Byte (Address)
+        // ELRS Receiver typically sends 0xC8 to the Flight Controller
+        if (ELRS_buffer[0] != 0xC8 && ELRS_buffer[0] != 0xEE) {
+            rx_index = 0;
+        }
+        // 2. Check if we have a full packet (Header 2 bytes + Payload 24 bytes)
+        else if (rx_index >= 26) {
+            // Verify CRC
+            uint8_t computed_crc = crsf_crc8(&ELRS_buffer[2], 23);
+
+            if (computed_crc == ELRS_buffer[25]) {
+                // SUCCESS! Unpack the bits into your struct
+            	extractELRS(ELRS_buffer, channels);
+
+                // Map to variables
+                UGV_Controls.cameraAngle_X = channels[2];
+                UGV_Controls.cameraAngle_Y = channels[3];
+                UGV_Controls.rightMotor    = channels[4];
+                UGV_Controls.leftMotor	   = channels[5];
+
+            }
+
+            // Reset index for next packet
+            rx_index = 0;
+        }
+
+        // IMPORTANT: Re-enable the interrupt for the next byte
+        HAL_UART_Receive_IT(&huart4, &rx_byte, 1);
+    }
+}
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called whenever there is an overflow on any timer
 
 	//change this use the millis() equivalent of esp32
