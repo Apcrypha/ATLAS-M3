@@ -141,7 +141,7 @@ uint8_t ELRS_packet[26];	//Sent ELRS raw bits will be saved here
 uint8_t rx_byte;              // Holds the single byte currently arriving
 uint8_t rx_index = 0;         // Tracks where we are in the packet
 
-uint8_t channels[16];		//Temporary stores channel values here when receiving
+uint16_t channels[16];		//Temporary stores channel values here when receiving
 
 
 /*---------------------------------------------------------------------Modular settings------------------------------------------------*/
@@ -186,6 +186,7 @@ void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B
 
 void CRSF_Parser(uint8_t* packet, ELRS_data* input);
 void extractELRS(uint8_t* buf, uint16_t* ch);
+void bitMask(uint16_t ch1);
 int ELRS_mapper(int Input, int minInput, int maxInput);
 uint8_t crsf_crc8(uint8_t *ptr, uint8_t len);
 
@@ -989,7 +990,7 @@ void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel,uint16_t motor, int1
 	__HAL_TIM_SET_COMPARE(htim,channel, *V_current);	//write duty cycle to PWM
 }
 
-void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B, uint16_t Pin_B, int8_t *direction)
+void UGV_setDirection(GPIO_TypeDef *Port_A, uint16_t Pin_A, GPIO_TypeDef *Port_B, uint16_t Pin_B, int8_t *direction)
 {
     if (*direction == 1) {
         HAL_GPIO_WritePin(Port_A, Pin_A, GPIO_PIN_SET);
@@ -1005,7 +1006,7 @@ void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B
 
 }
 
-void extractELRS(uint8_t* buf, uint16_t* ch) {//Extracts the raw ELRS bits to values
+void extractELRS(uint8_t *buf, uint16_t *ch) {//Extracts the raw ELRS bits to values
     // buf[0] is Address, buf[1] is Length, buf[2] is Type
     // The payload starts at buf[3]
 
@@ -1028,7 +1029,6 @@ void extractELRS(uint8_t* buf, uint16_t* ch) {//Extracts the raw ELRS bits to va
     ch[15] = ((uint16_t)buf[23] >> 5 | (uint16_t)buf[24] << 3)                      & 0x07FF;
 }
 
-
 int ELRS_mapper(int Input, int minInput, int maxInput){	//Maps values into ELRS ready
 	return ((Input - minInput) * (1811 - 172) / (maxInput - minInput)) + 172;
 }
@@ -1044,7 +1044,6 @@ uint8_t crsf_crc8(uint8_t *ptr, uint8_t len) {//Compute CRC for ELRS
     }
     return crc;
 }
-
 
 void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
     uint16_t ch[16];
@@ -1091,7 +1090,11 @@ void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
     packet[25] = crsf_crc8(&packet[2], 23);
 }
 
-
+void bitMask(uint16_t ch1){//decomposes the bits of channel 1 via bit masking
+	UGV_Controls.leftMotor_Dir 	 = (ch1 >> 0) & 1;
+	UGV_Controls.rightMotor_Dir  = (ch1 >> 1) & 1;
+	UGV_Controls.cameraMove		 = (ch1 >> 2) & 1;
+}
 //--------------------------------------------- ISR Functions---------------------------------
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//ISR when UART receives something
     if (huart->Instance == UART4) {//checks if UART4
@@ -1112,10 +1115,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//ISR when UART receive
             	extractELRS(ELRS_buffer, channels);
 
                 // Map to variables
-                UGV_Controls.cameraAngle_X = channels[2];
-                UGV_Controls.cameraAngle_Y = channels[3];
-                UGV_Controls.rightMotor    = channels[4];
-                UGV_Controls.leftMotor	   = channels[5];
+            	bitMask(channels[0]);
+                UGV_Controls.cameraAngle_X = channels[1];
+                UGV_Controls.cameraAngle_Y = channels[2];
+                UGV_Controls.rightMotor    = channels[3];
+                UGV_Controls.leftMotor	   = channels[4];
 
             }
 
