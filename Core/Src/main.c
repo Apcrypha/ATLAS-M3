@@ -64,15 +64,13 @@ typedef struct{ //Joystick values for the Ground vehicle
 	int8_t leftMotor_Dir;	//+1 means Right turn; -1 means Left turn; 0 means not moving
 	int8_t rightMotor_Dir;	//+1 means Forward; -1 means Backward; 0 means not moving
 
-}UGV_controls;
-
-typedef struct{
 	uint8_t cameraAngle_X;
 	uint8_t cameraAngle_Y;
 
 	uint8_t cameraMove;		//Functions as a software interrupt. Only when this becomes 1 does the moveServo() run
 
-}Camera_angle;
+}UGV_controls;
+
 
 /* USER CODE END PTD */
 
@@ -118,7 +116,6 @@ volatile uint16_t ADC_reading = 0;
 int16_t leftMotor = 0;
 int16_t rightMotor = 0;
 
-
 uint16_t UGV_rightVelocity = 0;						//velocity is in pulse length for PWM
 uint16_t UGV_leftVelocity = 0;
 
@@ -126,9 +123,13 @@ uint16_t UGV_leftVelocity = 0;
 uint16_t count;
 uint16_t Angle;
 
-#define maxUGV_Tick 8399								//set by the 20Khz counter
+#define maxUGV_Tick 1679								//set by the 20Khz counter
 #define bufferSize 4096	// The amount of ADC reading to store
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
+
+uint8_t ELRS_buffer[26];	//The ELRS raw bits will be saved here
+
+
 
 
 /*---------------------------------------------------------------------Modular settings------------------------------------------------*/
@@ -512,9 +513,9 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 0;
+  htim1.Init.Prescaler = 4;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 8399;
+  htim1.Init.Period = 1679;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -979,6 +980,30 @@ void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B
     }
 
 }
+
+void extractELRS(uint8_t* buf, uint16_t* ch) {//Extracts the raw ELRS bits to values
+    // buf[0] is Address, buf[1] is Length, buf[2] is Type
+    // The payload starts at buf[3]
+
+    ch[0]  = ((uint16_t)buf[3]       | (uint16_t)buf[4] << 8)                       & 0x07FF;
+    ch[1]  = ((uint16_t)buf[4] >> 3  | (uint16_t)buf[5] << 5)                       & 0x07FF;
+    ch[2]  = ((uint16_t)buf[5] >> 6  | (uint16_t)buf[6] << 2 | (uint16_t)buf[7] << 10) & 0x07FF;
+    ch[3]  = ((uint16_t)buf[7] >> 1  | (uint16_t)buf[8] << 7)                       & 0x07FF;
+    ch[4]  = ((uint16_t)buf[8] >> 4  | (uint16_t)buf[9] << 4)                       & 0x07FF;
+    ch[5]  = ((uint16_t)buf[9] >> 7  | (uint16_t)buf[10] << 1 | (uint16_t)buf[11] << 9) & 0x07FF;
+    ch[6]  = ((uint16_t)buf[11] >> 2 | (uint16_t)buf[12] << 6)                      & 0x07FF;
+    ch[7]  = ((uint16_t)buf[12] >> 5 | (uint16_t)buf[13] << 3)                      & 0x07FF;
+
+    ch[8]  = ((uint16_t)buf[14]      | (uint16_t)buf[15] << 8)                      & 0x07FF;
+    ch[9]  = ((uint16_t)buf[15] >> 3 | (uint16_t)buf[16] << 5)                      & 0x07FF;
+    ch[10] = ((uint16_t)buf[16] >> 6 | (uint16_t)buf[17] << 2 | (uint16_t)buf[18] << 10) & 0x07FF;
+    ch[11] = ((uint16_t)buf[18] >> 1 | (uint16_t)buf[19] << 7)                      & 0x07FF;
+    ch[12] = ((uint16_t)buf[19] >> 4 | (uint16_t)buf[20] << 4)                      & 0x07FF;
+    ch[13] = ((uint16_t)buf[20] >> 7 | (uint16_t)buf[21] << 1 | (uint16_t)buf[22] << 9) & 0x07FF;
+    ch[14] = ((uint16_t)buf[22] >> 2 | (uint16_t)buf[23] << 6)                      & 0x07FF;
+    ch[15] = ((uint16_t)buf[23] >> 5 | (uint16_t)buf[24] << 3)                      & 0x07FF;
+}
+
 
 
 //--------------------------------------------- ISR Functions---------------------------------

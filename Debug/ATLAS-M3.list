@@ -23,31 +23,31 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, ALLOC, LOAD, DATA
   9 .ccmram       00000000  10000000  10000000  00008010  2**0
                   CONTENTS
- 10 .bss          00002458  20000010  20000010  00008010  2**2
+ 10 .bss          0000245c  20000010  20000010  00008010  2**2
                   ALLOC
- 11 ._user_heap_stack 00000600  20002468  20002468  00008010  2**0
+ 11 ._user_heap_stack 00000604  2000246c  2000246c  00008010  2**0
                   ALLOC
  12 .ARM.attributes 00000030  00000000  00000000  00008010  2**0
                   CONTENTS, READONLY
- 13 .debug_info   0001497e  00000000  00000000  00008040  2**0
+ 13 .debug_info   000149f5  00000000  00000000  00008040  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 14 .debug_abbrev 00002994  00000000  00000000  0001c9be  2**0
+ 14 .debug_abbrev 000029a8  00000000  00000000  0001ca35  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 15 .debug_aranges 00001398  00000000  00000000  0001f358  2**3
+ 15 .debug_aranges 000013a0  00000000  00000000  0001f3e0  2**3
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 16 .debug_rnglists 00000f82  00000000  00000000  000206f0  2**0
+ 16 .debug_rnglists 00000f89  00000000  00000000  00020780  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 17 .debug_macro  00023c3f  00000000  00000000  00021672  2**0
+ 17 .debug_macro  00023c3d  00000000  00000000  00021709  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 18 .debug_line   00017577  00000000  00000000  000452b1  2**0
+ 18 .debug_line   00017718  00000000  00000000  00045346  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 19 .debug_str    000e1275  00000000  00000000  0005c828  2**0
+ 19 .debug_str    000e12b4  00000000  00000000  0005ca5e  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 20 .comment      00000043  00000000  00000000  0013da9d  2**0
+ 20 .comment      00000043  00000000  00000000  0013dd12  2**0
                   CONTENTS, READONLY
- 21 .debug_frame  00005058  00000000  00000000  0013dae0  2**2
+ 21 .debug_frame  0000507c  00000000  00000000  0013dd58  2**2
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 22 .debug_line_str 0000006e  00000000  00000000  00142b38  2**0
+ 22 .debug_line_str 0000006e  00000000  00000000  00142dd4  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
 
 Disassembly of section .text:
@@ -574,15 +574,15 @@ int main(void)
 	  for (uint8_t angle = 0; angle <= 180; angle += 10)
  800061c:	e7bc      	b.n	8000598 <main+0xa4>
  800061e:	bf00      	nop
- 8000620:	20000464 	.word	0x20000464
+ 8000620:	20000468 	.word	0x20000468
  8000624:	2000002c 	.word	0x2000002c
  8000628:	20000128 	.word	0x20000128
  800062c:	200001d8 	.word	0x200001d8
  8000630:	20000148 	.word	0x20000148
  8000634:	20000190 	.word	0x20000190
- 8000638:	2000044e 	.word	0x2000044e
- 800063c:	20000460 	.word	0x20000460
- 8000640:	20000454 	.word	0x20000454
+ 8000638:	20000452 	.word	0x20000452
+ 800063c:	20000464 	.word	0x20000464
+ 8000640:	20000458 	.word	0x20000458
 
 08000644 <SystemClock_Config>:
 /**
@@ -1118,17 +1118,17 @@ static void MX_TIM1_Init(void)
  8000922:	4b44      	ldr	r3, [pc, #272]	@ (8000a34 <MX_TIM1_Init+0x150>)
  8000924:	4a44      	ldr	r2, [pc, #272]	@ (8000a38 <MX_TIM1_Init+0x154>)
  8000926:	601a      	str	r2, [r3, #0]
-  htim1.Init.Prescaler = 0;
+  htim1.Init.Prescaler = 4;
  8000928:	4b42      	ldr	r3, [pc, #264]	@ (8000a34 <MX_TIM1_Init+0x150>)
- 800092a:	2200      	movs	r2, #0
+ 800092a:	2204      	movs	r2, #4
  800092c:	605a      	str	r2, [r3, #4]
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
  800092e:	4b41      	ldr	r3, [pc, #260]	@ (8000a34 <MX_TIM1_Init+0x150>)
  8000930:	2200      	movs	r2, #0
  8000932:	609a      	str	r2, [r3, #8]
-  htim1.Init.Period = 8399;
+  htim1.Init.Period = 1679;
  8000934:	4b3f      	ldr	r3, [pc, #252]	@ (8000a34 <MX_TIM1_Init+0x150>)
- 8000936:	f242 02cf 	movw	r2, #8399	@ 0x20cf
+ 8000936:	f240 628f 	movw	r2, #1679	@ 0x68f
  800093a:	60da      	str	r2, [r3, #12]
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
  800093c:	4b3d      	ldr	r3, [pc, #244]	@ (8000a34 <MX_TIM1_Init+0x150>)
@@ -2333,7 +2333,7 @@ void readMPU(){
  80010d4:	bd80      	pop	{r7, pc}
  80010d6:	bf00      	nop
  80010d8:	200000d4 	.word	0x200000d4
- 80010dc:	2000044e 	.word	0x2000044e
+ 80010dc:	20000452 	.word	0x20000452
  80010e0:	45800000 	.word	0x45800000
  80010e4:	20000430 	.word	0x20000430
  80010e8:	41833333 	.word	0x41833333
@@ -2405,9 +2405,9 @@ void readBattery(){//Converts ADC to battery percentage
  800117a:	4770      	bx	lr
  800117c:	4041e376 	.word	0x4041e376
  8001180:	400a7de5 	.word	0x400a7de5
- 8001184:	20000456 	.word	0x20000456
+ 8001184:	2000045a 	.word	0x2000045a
  8001188:	42c80000 	.word	0x42c80000
- 800118c:	20000450 	.word	0x20000450
+ 800118c:	20000454 	.word	0x20000454
 
 08001190 <UGV_setSpeed>:
 
@@ -2594,6 +2594,8 @@ void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B
 	...
 
 080012dc <HAL_TIM_PeriodElapsedCallback>:
+}
+
 
 
 //--------------------------------------------- ISR Functions---------------------------------
@@ -2663,12 +2665,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called when
  8001354:	40020800 	.word	0x40020800
  8001358:	2000044d 	.word	0x2000044d
  800135c:	40021000 	.word	0x40021000
- 8001360:	20000458 	.word	0x20000458
- 8001364:	2000045e 	.word	0x2000045e
+ 8001360:	2000045c 	.word	0x2000045c
+ 8001364:	20000462 	.word	0x20000462
  8001368:	20000448 	.word	0x20000448
  800136c:	20000148 	.word	0x20000148
- 8001370:	2000045a 	.word	0x2000045a
- 8001374:	2000045c 	.word	0x2000045c
+ 8001370:	2000045e 	.word	0x2000045e
+ 8001374:	20000460 	.word	0x20000460
  8001378:	2000044a 	.word	0x2000044a
 
 0800137c <HAL_RTCEx_WakeUpTimerEventCallback>:
@@ -2733,8 +2735,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {	// Called when ADC buff
  80013cc:	f85d 7b04 	ldr.w	r7, [sp], #4
  80013d0:	4770      	bx	lr
  80013d2:	bf00      	nop
- 80013d4:	20000464 	.word	0x20000464
- 80013d8:	20000456 	.word	0x20000456
+ 80013d4:	20000468 	.word	0x20000468
+ 80013d8:	2000045a 	.word	0x2000045a
 
 080013dc <HAL_GPIO_EXTI_Callback>:
 
@@ -2759,7 +2761,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){	//EXTI ISR
  80013f8:	46bd      	mov	sp, r7
  80013fa:	f85d 7b04 	ldr.w	r7, [sp], #4
  80013fe:	4770      	bx	lr
- 8001400:	20000454 	.word	0x20000454
+ 8001400:	20000458 	.word	0x20000458
 
 08001404 <Error_Handler>:
 /**
@@ -4259,7 +4261,7 @@ LoopFillZerobss:
   ldr r2, =_sbss
  8001bdc:	20000010 	.word	0x20000010
   ldr r4, =_ebss
- 8001be0:	20002468 	.word	0x20002468
+ 8001be0:	2000246c 	.word	0x2000246c
 
 08001be4 <ADC_IRQHandler>:
  * @retval None       
@@ -4957,7 +4959,7 @@ __weak void HAL_IncTick(void)
  8001fb0:	4770      	bx	lr
  8001fb2:	bf00      	nop
  8001fb4:	2000000c 	.word	0x2000000c
- 8001fb8:	20002464 	.word	0x20002464
+ 8001fb8:	20002468 	.word	0x20002468
 
 08001fbc <HAL_GetTick>:
   * @note This function is declared as __weak to be overwritten in case of other 
@@ -4977,7 +4979,7 @@ __weak uint32_t HAL_GetTick(void)
  8001fc8:	f85d 7b04 	ldr.w	r7, [sp], #4
  8001fcc:	4770      	bx	lr
  8001fce:	bf00      	nop
- 8001fd0:	20002464 	.word	0x20002464
+ 8001fd0:	20002468 	.word	0x20002468
 
 08001fd4 <HAL_Delay>:
   *       implementations in user file.
