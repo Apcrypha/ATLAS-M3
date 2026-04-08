@@ -143,6 +143,25 @@ uint8_t rx_index = 0;         // Tracks where we are in the packet
 
 uint16_t channels[16];		//Temporary stores channel values here when receiving
 
+const uint8_t crsf_crc8_table[256] = {//Look up table for the CRC
+    0x00, 0xD5, 0x7F, 0xAA, 0xFE, 0x2B, 0x81, 0x54, 0x29, 0xFC, 0x56, 0x83, 0xD7, 0x02, 0xA8, 0x7D,
+    0x52, 0x87, 0x2D, 0xF8, 0xAC, 0x79, 0xD3, 0x06, 0x7B, 0xAE, 0x04, 0xD1, 0x85, 0x50, 0xFA, 0x2F,
+    0xA4, 0x71, 0xDB, 0x0E, 0x5A, 0x8F, 0x25, 0xF0, 0x8D, 0x58, 0xF2, 0x27, 0x73, 0xA6, 0x0C, 0xD9,
+    0xF6, 0x23, 0x89, 0x5C, 0x08, 0xDD, 0x77, 0xA2, 0xDF, 0x0A, 0xA0, 0x75, 0x21, 0xF4, 0x5E, 0x8B,
+    0x4D, 0x98, 0x32, 0xE7, 0xB3, 0x66, 0xCC, 0x19, 0x64, 0xB1, 0x1B, 0xCE, 0x9A, 0x4F, 0xE5, 0x30,
+    0x1F, 0xCA, 0x60, 0xB5, 0xE1, 0x34, 0x9E, 0x4B, 0x36, 0xE3, 0x49, 0x9C, 0xC8, 0x1D, 0xB7, 0x62,
+    0xE9, 0x3C, 0x96, 0x43, 0x17, 0xC2, 0x68, 0xBD, 0xC0, 0x15, 0xBF, 0x6A, 0x3E, 0xEB, 0x41, 0x94,
+    0xBB, 0x6E, 0xC4, 0x11, 0x45, 0x90, 0x3A, 0xEF, 0x92, 0x47, 0xED, 0x38, 0x6C, 0xB9, 0x13, 0xC6,
+    0x9A, 0x4F, 0xE5, 0x30, 0x64, 0xB1, 0x1B, 0xCE, 0xB3, 0x66, 0xCC, 0x19, 0x4D, 0x98, 0x32, 0xE7,
+    0xC8, 0x1D, 0xB7, 0x62, 0x36, 0xE3, 0x49, 0x9C, 0xE1, 0x34, 0x9E, 0x4B, 0x1F, 0xCA, 0x60, 0xB5,
+    0x3E, 0xEB, 0x41, 0x94, 0xC0, 0x15, 0xBF, 0x6A, 0x17, 0xC2, 0x68, 0xBD, 0xE9, 0x3C, 0x96, 0x43,
+    0x6C, 0xB9, 0x13, 0xC6, 0x92, 0x47, 0xED, 0x38, 0x45, 0x90, 0x3A, 0xEF, 0xBB, 0x6E, 0xC4, 0x11,
+    0xD7, 0x02, 0xA8, 0x7D, 0x29, 0xFC, 0x56, 0x83, 0xFE, 0x2B, 0x81, 0x54, 0x00, 0xD5, 0x7F, 0xAA,
+    0x85, 0x50, 0xFA, 0x2F, 0x7B, 0xAE, 0x04, 0xD1, 0xDB, 0x0E, 0xA4, 0x71, 0x25, 0xF0, 0x5A, 0x8F,
+    0x73, 0xA6, 0x0C, 0xD9, 0x8D, 0x58, 0xF2, 0x27, 0x5A, 0x8F, 0x25, 0xF0, 0xA4, 0x71, 0xDB, 0x0E,
+    0x21, 0xF4, 0x5E, 0x8B, 0xDF, 0x0A, 0xA0, 0x75, 0x08, 0xDD, 0x77, 0xA2, 0xF6, 0x23, 0x89, 0x5C
+};
+
 
 /*---------------------------------------------------------------------Modular settings------------------------------------------------*/
 /*All these Variables are changed only depending on the modular configuration*/
@@ -1006,43 +1025,8 @@ void UGV_setDirection(GPIO_TypeDef *Port_A, uint16_t Pin_A, GPIO_TypeDef *Port_B
 
 }
 
-void extractELRS(uint8_t *buf, uint16_t *ch) {//Extracts the raw ELRS bits to values
-    // buf[0] is Address, buf[1] is Length, buf[2] is Type
-    // The payload starts at buf[3]
-
-    ch[0]  = ((uint16_t)buf[3]       | (uint16_t)buf[4] << 8)                       & 0x07FF;
-    ch[1]  = ((uint16_t)buf[4] >> 3  | (uint16_t)buf[5] << 5)                       & 0x07FF;
-    ch[2]  = ((uint16_t)buf[5] >> 6  | (uint16_t)buf[6] << 2 | (uint16_t)buf[7] << 10) & 0x07FF;
-    ch[3]  = ((uint16_t)buf[7] >> 1  | (uint16_t)buf[8] << 7)                       & 0x07FF;
-    ch[4]  = ((uint16_t)buf[8] >> 4  | (uint16_t)buf[9] << 4)                       & 0x07FF;
-    ch[5]  = ((uint16_t)buf[9] >> 7  | (uint16_t)buf[10] << 1 | (uint16_t)buf[11] << 9) & 0x07FF;
-    ch[6]  = ((uint16_t)buf[11] >> 2 | (uint16_t)buf[12] << 6)                      & 0x07FF;
-    ch[7]  = ((uint16_t)buf[12] >> 5 | (uint16_t)buf[13] << 3)                      & 0x07FF;
-
-    ch[8]  = ((uint16_t)buf[14]      | (uint16_t)buf[15] << 8)                      & 0x07FF;
-    ch[9]  = ((uint16_t)buf[15] >> 3 | (uint16_t)buf[16] << 5)                      & 0x07FF;
-    ch[10] = ((uint16_t)buf[16] >> 6 | (uint16_t)buf[17] << 2 | (uint16_t)buf[18] << 10) & 0x07FF;
-    ch[11] = ((uint16_t)buf[18] >> 1 | (uint16_t)buf[19] << 7)                      & 0x07FF;
-    ch[12] = ((uint16_t)buf[19] >> 4 | (uint16_t)buf[20] << 4)                      & 0x07FF;
-    ch[13] = ((uint16_t)buf[20] >> 7 | (uint16_t)buf[21] << 1 | (uint16_t)buf[22] << 9) & 0x07FF;
-    ch[14] = ((uint16_t)buf[22] >> 2 | (uint16_t)buf[23] << 6)                      & 0x07FF;
-    ch[15] = ((uint16_t)buf[23] >> 5 | (uint16_t)buf[24] << 3)                      & 0x07FF;
-}
-
 int ELRS_mapper(int Input, int minInput, int maxInput){	//Maps values into ELRS ready
 	return ((Input - minInput) * (1811 - 172) / (maxInput - minInput)) + 172;
-}
-
-uint8_t crsf_crc8(uint8_t *ptr, uint8_t len) {//Compute CRC for ELRS
-    uint8_t crc = 0;
-    for (uint8_t i = 0; i < len; i++) {
-        crc ^= ptr[i];
-        for (uint8_t j = 0; j < 8; j++) {
-            if (crc & 0x80) crc = (crc << 1) ^ 0xD5;
-            else crc <<= 1;
-        }
-    }
-    return crc;
 }
 
 void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
@@ -1088,6 +1072,37 @@ void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
 
     // --- CRC Calculation---
     packet[25] = crsf_crc8(&packet[2], 23);
+}
+
+void extractELRS(uint8_t *buf, uint16_t *ch) {//Extracts the raw ELRS bits to values
+    // buf[0] is Address, buf[1] is Length, buf[2] is Type
+    // The payload starts at buf[3]
+
+    ch[0]  = ((uint16_t)buf[3]       | (uint16_t)buf[4] << 8)                       & 0x07FF;
+    ch[1]  = ((uint16_t)buf[4] >> 3  | (uint16_t)buf[5] << 5)                       & 0x07FF;
+    ch[2]  = ((uint16_t)buf[5] >> 6  | (uint16_t)buf[6] << 2 | (uint16_t)buf[7] << 10) & 0x07FF;
+    ch[3]  = ((uint16_t)buf[7] >> 1  | (uint16_t)buf[8] << 7)                       & 0x07FF;
+    ch[4]  = ((uint16_t)buf[8] >> 4  | (uint16_t)buf[9] << 4)                       & 0x07FF;
+    ch[5]  = ((uint16_t)buf[9] >> 7  | (uint16_t)buf[10] << 1 | (uint16_t)buf[11] << 9) & 0x07FF;
+    ch[6]  = ((uint16_t)buf[11] >> 2 | (uint16_t)buf[12] << 6)                      & 0x07FF;
+    ch[7]  = ((uint16_t)buf[12] >> 5 | (uint16_t)buf[13] << 3)                      & 0x07FF;
+
+    ch[8]  = ((uint16_t)buf[14]      | (uint16_t)buf[15] << 8)                      & 0x07FF;
+    ch[9]  = ((uint16_t)buf[15] >> 3 | (uint16_t)buf[16] << 5)                      & 0x07FF;
+    ch[10] = ((uint16_t)buf[16] >> 6 | (uint16_t)buf[17] << 2 | (uint16_t)buf[18] << 10) & 0x07FF;
+    ch[11] = ((uint16_t)buf[18] >> 1 | (uint16_t)buf[19] << 7)                      & 0x07FF;
+    ch[12] = ((uint16_t)buf[19] >> 4 | (uint16_t)buf[20] << 4)                      & 0x07FF;
+    ch[13] = ((uint16_t)buf[20] >> 7 | (uint16_t)buf[21] << 1 | (uint16_t)buf[22] << 9) & 0x07FF;
+    ch[14] = ((uint16_t)buf[22] >> 2 | (uint16_t)buf[23] << 6)                      & 0x07FF;
+    ch[15] = ((uint16_t)buf[23] >> 5 | (uint16_t)buf[24] << 3)                      & 0x07FF;
+}
+
+uint8_t crsf_crc8(uint8_t *ptr, uint8_t len) {//Compute CRC for ELRS
+	uint8_t crc = 0;
+	    while (len--) {
+	        crc = crsf_crc8_table[crc ^ *ptr++];
+	    }
+	    return crc;
 }
 
 void bitMask(uint16_t ch1){//decomposes the bits of channel 1 via bit masking
