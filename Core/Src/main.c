@@ -1015,12 +1015,9 @@ void UGV_setDirection(GPIO_TypeDef *Port_A, uint16_t Pin_A, GPIO_TypeDef *Port_B
         HAL_GPIO_WritePin(Port_A, Pin_A, GPIO_PIN_SET);
         HAL_GPIO_WritePin(Port_B, Pin_B, GPIO_PIN_RESET);
 
-    } else if (*direction == -1) {
+    } else{
         HAL_GPIO_WritePin(Port_A, Pin_A, GPIO_PIN_RESET);
         HAL_GPIO_WritePin(Port_B, Pin_B, GPIO_PIN_SET);
-    } else {
-        HAL_GPIO_WritePin(Port_A, Pin_A, GPIO_PIN_RESET);
-        HAL_GPIO_WritePin(Port_B, Pin_B, GPIO_PIN_RESET);
     }
 
 }
@@ -1106,7 +1103,7 @@ uint8_t crsf_crc8(uint8_t *ptr, uint8_t len) {//Compute CRC for ELRS
 }
 
 void bitMask(uint16_t ch1){//decomposes the bits of channel 1 via bit masking
-	UGV_Controls.leftMotor_Dir 	 = (ch1 >> 0) & 1;
+	UGV_Controls.leftMotor_Dir 	 = ch1 & 1;
 	UGV_Controls.rightMotor_Dir  = (ch1 >> 1) & 1;
 	UGV_Controls.cameraMove		 = (ch1 >> 2) & 1;
 }
