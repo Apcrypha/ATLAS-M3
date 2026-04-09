@@ -61,13 +61,9 @@ typedef struct{ //Joystick values for the Ground vehicle
 	int16_t leftMotor;
 	int16_t rightMotor;
 
-	int8_t leftMotor_Dir;	//+1 means Right turn; -1 means Left turn; 0 means not moving
-	int8_t rightMotor_Dir;	//+1 means Forward; -1 means Backward; 0 means not moving
+	int8_t leftMotor_Dir;	//+1 means Right turn; 	0 means Left turn and not moving
+	int8_t rightMotor_Dir;	//+1 means Forward;    	0 means Backward and not moving
 
-	uint8_t cameraAngle_X;
-	uint8_t cameraAngle_Y;
-
-	uint8_t cameraMove;		//Functions as a software interrupt. Only when this becomes 1 does the moveServo() run
 
 }UGV_controls;
 
@@ -117,16 +113,16 @@ ELRS_data ELRS_Data;
 HAL_StatusTypeDef status;
 
 
-float batPercentage = 0.00f;
-
 volatile uint8_t mpuStatus = 0;
 volatile uint16_t ADC_reading = 0;
-int16_t leftMotor = 0;
-int16_t rightMotor = 0;
 
-uint16_t UGV_rightVelocity = 0;						//velocity is in pulse length for PWM
+uint16_t UGV_rightVelocity = 0;						//holder for current velocity is in pulse length for PWM
 uint16_t UGV_leftVelocity = 0;
 
+uint8_t cameraAngle_X = 90;
+uint8_t cameraAngle_Y = 90;
+
+uint8_t cameraMove	= 0;		//Functions as a software interrupt. Only when this becomes 1 does the moveServo() run
 
 uint16_t count;
 uint16_t Angle;
@@ -135,6 +131,7 @@ uint16_t Angle;
 #define bufferSize 4096	// The amount of ADC reading to store
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
 
+//-----------------------------------------------ELRS & CRSF---------------------------------
 uint8_t ELRS_buffer[26];	//Received ELRS raw bits will be saved here
 uint8_t ELRS_packet[26];	//Sent ELRS raw bits will be saved here
 
@@ -165,9 +162,11 @@ const uint8_t crsf_crc8_table[256] = {//Look up table for the CRC
 
 /*---------------------------------------------------------------------Modular settings------------------------------------------------*/
 /*All these Variables are changed only depending on the modular configuration*/
+uint8_t MODE = 0;	//0=UGV ||	1=UAV
+
 
 //For the controller
-uint16_t rangeJoystick = 2047;	//Normalized ± range. Only supports up to 16bit but can be changed in the future
+
 
 //For UGV
 float UGV_k = 30.0f;	//Multiplier constant of the UGV
@@ -200,17 +199,14 @@ void readMPU();
 void moveServo();
 void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle);
 
-void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel,uint16_t motor, int16_t *V_target, uint16_t *V_current);
+void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, int16_t *V_target, uint16_t *V_current);
 void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B, uint16_t Pin_B, int8_t *direction);
 
 void CRSF_Parser(uint8_t* packet, ELRS_data* input);
 void extractELRS(uint8_t* buf, uint16_t* ch);
 void bitMask(uint16_t ch1);
-int ELRS_mapper(int Input, int minInput, int maxInput);
+int ELRS_Encoder(float Input, float minInput, float maxInput);
 uint8_t crsf_crc8(uint8_t *ptr, uint8_t len);
-
-
-
 
 void readBattery();
 
@@ -924,6 +920,12 @@ static void MX_GPIO_Init(void)
 
 void moveServo(){
 
+	if(!cameraMove)return;
+
+	cameraMove = 0;
+
+	setServoAngle(&htim3, TIM_CHANNEL_3, cameraAngle_X);
+	setServoAngle(&htim3, TIM_CHANNEL_4, cameraAngle_Y);
 }
 
 void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){
@@ -984,11 +986,12 @@ void readBattery(){//Converts ADC to battery percentage
 	float readingVoltage = ( ((float) (ADC_reading - minADC) * (maxVoltage - minVoltage) ) / (maxADC - minADC) ) + minVoltage;
 
 	//Convert to battery percentage
-	batPercentage = ( (readingVoltage - minVoltage) * 100 ) / (maxVoltage - minVoltage);
+	float batPercentage = ( (readingVoltage - minVoltage) * 100 ) / (maxVoltage - minVoltage);
 
+	ELRS_Data.batteryPercentage = ELRS_Encoder(batPercentage,0,100);
 }
 
-void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel,uint16_t motor, int16_t *V_target, uint16_t *V_current){
+void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, int16_t *V_target, uint16_t *V_current){
 
 	/*
 	  The equation used is discrete proportional (P) controller where:
@@ -1022,7 +1025,7 @@ void UGV_setDirection(GPIO_TypeDef *Port_A, uint16_t Pin_A, GPIO_TypeDef *Port_B
 
 }
 
-int ELRS_mapper(int Input, int minInput, int maxInput){	//Maps values into ELRS ready
+int ELRS_Encoder(float Input, float minInput, float maxInput){	//Convert values to ELRS range 172-1811
 	return ((Input - minInput) * (1811 - 172) / (maxInput - minInput)) + 172;
 }
 
@@ -1105,7 +1108,7 @@ uint8_t crsf_crc8(uint8_t *ptr, uint8_t len) {//Compute CRC for ELRS
 void bitMask(uint16_t ch1){//decomposes the bits of channel 1 via bit masking
 	UGV_Controls.leftMotor_Dir 	 = ch1 & 1;
 	UGV_Controls.rightMotor_Dir  = (ch1 >> 1) & 1;
-	UGV_Controls.cameraMove		 = (ch1 >> 2) & 1;
+	cameraMove					 = (ch1 >> 2) & 1;
 }
 //--------------------------------------------- ISR Functions---------------------------------
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//ISR when UART receives something
@@ -1128,8 +1131,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//ISR when UART receive
 
                 // Map to variables
             	bitMask(channels[0]);
-                UGV_Controls.cameraAngle_X = channels[1];
-                UGV_Controls.cameraAngle_Y = channels[2];
+                cameraAngle_X = channels[1] - 172;	//deducts the 172 added by the controller
+                cameraAngle_Y = channels[2] - 172;
                 UGV_Controls.rightMotor    = channels[3];
                 UGV_Controls.leftMotor	   = channels[4];
 
@@ -1149,12 +1152,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called when
 	//change this use the millis() equivalent of esp32
 	if (htim->Instance == TIM4){	//Checks if timer overflow is Timer 4
        //ISR every 5ms
-
+		if (!MODE)return;
     	UGV_setDirection(GPIOC, GPIO_PIN_6, GPIOA, GPIO_PIN_7, &UGV_Controls.leftMotor_Dir);
     	UGV_setDirection(GPIOE, GPIO_PIN_11, GPIOE, GPIO_PIN_9, &UGV_Controls.rightMotor_Dir);
 
-    	UGV_setSpeed(&htim1, TIM_CHANNEL_3, leftMotor, &UGV_Controls.leftMotor, &UGV_leftVelocity);
-    	UGV_setSpeed(&htim1, TIM_CHANNEL_4, rightMotor, &UGV_Controls.rightMotor, &UGV_rightVelocity);
+    	UGV_setSpeed(&htim1, TIM_CHANNEL_3, &UGV_Controls.leftMotor, &UGV_leftVelocity);
+    	UGV_setSpeed(&htim1, TIM_CHANNEL_4, &UGV_Controls.rightMotor, &UGV_rightVelocity);
 
     }
 }
