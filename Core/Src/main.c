@@ -124,8 +124,7 @@ uint8_t cameraAngle_Y = 90;
 
 uint8_t cameraMove	= 0;		//Functions as a software interrupt. Only when this becomes 1 does the moveServo() run
 
-uint16_t count;
-uint16_t Angle;
+uint8_t error = 0;				//Each number corresponds to different errors
 
 #define maxUGV_Tick 1679								//set by the 20Khz counter
 #define bufferSize 4096	// The amount of ADC reading to store
@@ -281,10 +280,12 @@ int main(void)
 	//disable this when MPU is disconnected because Error_Handler() causes a loop.
   status = MPU6500_Init();	//Initialize MPU6500
   if(status != HAL_OK){
-      Error_Handler();
+      error = 1;
+	  Error_Handler();
   }
   status = MPU6500_EnableDataReadyInterrupts();	//Enable Interrupt pin
   if(status != HAL_OK){
+	  error = 2;
       Error_Handler();
   }
 
@@ -297,25 +298,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
-
-	  for (uint8_t angle = 0; angle <= 180; angle += 10)
-      {
-          setServoAngle(&htim3, TIM_CHANNEL_3, angle);
-          setServoAngle(&htim3, TIM_CHANNEL_4, angle);
-          Angle = angle;
-          HAL_Delay(100);
-      }
-
-      // Sweep back from 180 to 0 degrees
-      for (uint8_t angle = 180; angle > 0; angle -= 10)
-      {
-          setServoAngle(&htim3, TIM_CHANNEL_3, angle);
-          setServoAngle(&htim3, TIM_CHANNEL_4, angle);
-          Angle = angle;
-          HAL_Delay(100);
-      }
-      if(mpuStatus == 1){ mpuStatus = 0;  readMPU();  }
 
       CRSF_Parser(ELRS_packet, &ELRS_Data);
 
@@ -872,7 +854,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOE_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7|GPIO_PIN_8, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_9|GPIO_PIN_11, GPIO_PIN_RESET);
@@ -880,8 +862,8 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PA7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  /*Configure GPIO pins : PA7 PA8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -1202,11 +1184,27 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){	//EXTI ISR
   */
 void Error_Handler(void)
 {
-  /* USER CODE BEGIN Error_Handler_Debug */
+  uint8_t errorMax = 10;
+	/* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)
   {
+	    // Blink error times
+	    for (uint8_t i = 0; i < error; i++)
+	    {
+	        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
+	        HAL_Delay(500);
+
+	        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
+	        HAL_Delay(500);
+	    }
+
+	    // Remaining idle time
+	    for (uint8_t i = error; i < errorMax; i++)
+	    {
+	        HAL_Delay(500);
+	    }
   }
   /* USER CODE END Error_Handler_Debug */
 }
