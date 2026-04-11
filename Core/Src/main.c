@@ -1020,7 +1020,7 @@ void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
 
 
     // Fill unused channels with center value (992)
-    for(int i = 5; i < 16; i++) ch[i] = 992;
+    for(int i = 1; i < 16; i++) ch[i] = 992;
 
     // --- STEP 2: PACKET HEADER ---
     packet[0] = 0xEE; // Address

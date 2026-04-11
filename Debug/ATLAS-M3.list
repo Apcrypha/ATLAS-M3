@@ -2381,8 +2381,8 @@ void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
 
 
     // Fill unused channels with center value (992)
-    for(int i = 5; i < 16; i++) ch[i] = 992;
- 8001150:	2305      	movs	r3, #5
+    for(int i = 1; i < 16; i++) ch[i] = 992;
+ 8001150:	2301      	movs	r3, #1
  8001152:	62fb      	str	r3, [r7, #44]	@ 0x2c
  8001154:	e00a      	b.n	800116c <CRSF_Parser+0x30>
  8001156:	6afb      	ldr	r3, [r7, #44]	@ 0x2c
