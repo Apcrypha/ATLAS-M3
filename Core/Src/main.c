@@ -113,7 +113,8 @@ ELRS_data ELRS_Data;
 HAL_StatusTypeDef status;
 
 
-volatile uint8_t mpuStatus = 0;
+volatile uint8_t MPUstatus = 0;			//read MPU value when 1
+uint8_t ADCstatus = 0;					//read ADC value when 1
 volatile uint16_t ADC_reading = 0;
 
 uint16_t UGV_rightVelocity = 0;						//holder for current velocity is in pulse length for PWM
@@ -298,6 +299,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+	  if (MPUstatus) readMPU();
 
       CRSF_Parser(ELRS_packet, &ELRS_Data);
 
@@ -954,6 +957,7 @@ void readMPU(){
 	MPU_Data.gY = gyro_y / 16.4f;
 	MPU_Data.gZ = gyro_z / 16.4f;
 
+	MPUstatus = 0;
 }
 
 void readBattery(){//Converts ADC to battery percentage
@@ -1092,7 +1096,9 @@ void bitMask(uint16_t ch1){//decomposes the bits of channel 1 via bit masking
 	UGV_Controls.rightMotor_Dir  = (ch1 >> 1) & 1;
 	cameraMove					 = (ch1 >> 2) & 1;
 }
+
 //--------------------------------------------- ISR Functions---------------------------------
+
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//ISR when UART receives something
     if (huart->Instance == UART4) {//checks if UART4
         ELRS_buffer[rx_index++] = rx_byte;
@@ -1145,6 +1151,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called when
 }
 
 void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){	//LSE Timer ISR
+	ADCstatus = 1;
 	readBattery();
 
 }
@@ -1161,17 +1168,20 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {	// Called when ADC buff
  * Make sure that an ISR is always below 50% time than the interrupt
  */
 
+	if(!ADCstatus)return;
 	uint32_t sum;
 	for (uint16_t i = 0; i <= 4095; i ++)
 	      {
 		sum += ADC_buffer[i];
 	      }
 	ADC_reading = sum/4096;
+
+	ADCstatus = 0;
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){	//EXTI ISR
 	if(GPIO_Pin == GPIO_PIN_8){
-		mpuStatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
+		MPUstatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
 	}
 }
 
