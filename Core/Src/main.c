@@ -125,10 +125,16 @@ uint8_t cameraAngle_Y = 90;
 
 uint8_t cameraMove	= 0;		//Functions as a software interrupt. Only when this becomes 1 does the moveServo() run
 
+uint8_t errorMax = 10;
 uint8_t error = 0;				//Each number corresponds to different errors
 
 #define maxUGV_Tick 1679								//set by the 20Khz counter
 #define bufferSize 4096	// The amount of ADC reading to store
+#define DSHOT_PERIOD 280		//for dshot600 280ticks per period
+#define DSHOT_1      210		//for dshot600 logic HIGH
+#define DSHOT_0      105		//for dshot600 logic LOW
+
+
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
 
 //-----------------------------------------------ELRS & CRSF---------------------------------
@@ -724,7 +730,7 @@ static void MX_TIM5_Init(void)
 
   /* USER CODE END TIM5_Init 1 */
   htim5.Instance = TIM5;
-  htim5.Init.Prescaler = 168-1;
+  htim5.Init.Prescaler = 0;
   htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim5.Init.Period = 4294967295;
   htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -1097,6 +1103,24 @@ void bitMask(uint16_t ch1){//decomposes the bits of channel 1 via bit masking
 	cameraMove					 = (ch1 >> 2) & 1;
 }
 
+uint16_t dshot_prepare_packet(uint16_t value){//for dshot
+    uint16_t packet;
+    uint8_t csum = 0;
+    uint16_t csum_data;
+
+    value <<= 1; // telemetry = 0
+
+    csum_data = value;
+    for (int i = 0; i < 3; i++) {
+        csum ^= csum_data;
+        csum_data >>= 4;
+    }
+    csum &= 0xF;
+
+    packet = (value << 4) | csum;
+    return packet;
+}
+
 //--------------------------------------------- ISR Functions---------------------------------
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//ISR when UART receives something
@@ -1194,12 +1218,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){	//EXTI ISR
   */
 void Error_Handler(void)
 {
-  uint8_t errorMax = 10;
-	/* USER CODE BEGIN Error_Handler_Debug */
+  /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)
   {
+
 	    // Blink error times
 	    for (uint8_t i = 0; i < error; i++)
 	    {
