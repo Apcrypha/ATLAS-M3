@@ -1160,8 +1160,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//ISR when UART receive
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called whenever there is an overflow on any timer
-
-	//change this use the millis() equivalent of esp32
 	if (htim->Instance == TIM4){	//Checks if timer overflow is Timer 4
        //ISR every 5ms
 		if (!MODE)return;

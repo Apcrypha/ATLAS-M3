@@ -3457,8 +3457,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called when
  8001932:	b084      	sub	sp, #16
  8001934:	af02      	add	r7, sp, #8
  8001936:	6078      	str	r0, [r7, #4]
-
-	//change this use the millis() equivalent of esp32
 	if (htim->Instance == TIM4){	//Checks if timer overflow is Timer 4
  8001938:	687b      	ldr	r3, [r7, #4]
  800193a:	681b      	ldr	r3, [r3, #0]
