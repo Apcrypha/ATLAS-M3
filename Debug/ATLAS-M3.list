@@ -2537,9 +2537,9 @@ void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
  80012a8:	ddf1      	ble.n	800128e <CRSF_Parser+0x1a>
 
     // --- STEP 2: PACKET HEADER ---
-    packet[0] = 0xEE; // Address
+    packet[0] = 0xC8; // Idenfier for the UV
  80012aa:	687b      	ldr	r3, [r7, #4]
- 80012ac:	22ee      	movs	r2, #238	@ 0xee
+ 80012ac:	22c8      	movs	r2, #200	@ 0xc8
  80012ae:	701a      	strb	r2, [r3, #0]
     packet[1] = 24;   // Length
  80012b0:	687b      	ldr	r3, [r7, #4]

@@ -1033,7 +1033,7 @@ void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
     for(int i = 1; i < 16; i++) ch[i] = 992;
 
     // --- STEP 2: PACKET HEADER ---
-    packet[0] = 0xEE; // Address
+    packet[0] = 0xC8; // Idenfier for the UV
     packet[1] = 24;   // Length
     packet[2] = 0x16; // Type (RC Channels)
 
