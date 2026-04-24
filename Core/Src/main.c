@@ -15,6 +15,8 @@ for loop condition check|	1	|	5.95 ns
 for faster dividion use bit shifting. this can work on any number divisible by 2^n. this only outputs integers
 division = number>>9;	--> same as number/512
 
+Every ISR must be calculated so that interrupt nesting is avoided. ISR's must be atleast 50% shorter than the interrupt itself.
+
 
  */
 
@@ -104,10 +106,8 @@ HAL_StatusTypeDef status;
 
 
 volatile uint8_t MPUstatus = 0;			//read MPU value when 1
-volatile uint8_t ADCreadLSE = 0;		//read ADC value LSE set it to 1
-volatile uint16_t ADC_reading = 0;
+volatile uint16_t ADC_reading = 0;		//stores the ADC reading for battery percentage
 volatile uint32_t ADCsum;				//stores the ISR ADC total
-volatile uint8_t ADCupdate = 0;			//when 1 updates the battery percentage
 
 uint16_t UGV_rightVelocity = 0;						//holder for current velocity is in pulse length for PWM
 uint16_t UGV_leftVelocity = 0;
@@ -301,6 +301,8 @@ int main(void)
 	  if (MPUstatus) readMPU();
 
 	  moveServo();
+
+	  readBattery();
 
       CRSF_Parser(ELRS_packet, &ELRS_Data);
 
