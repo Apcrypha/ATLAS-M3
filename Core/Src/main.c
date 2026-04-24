@@ -1,31 +1,21 @@
 /* USER CODE BEGIN Header */
-/* Codes that might be reused later
- *
- *
-	uint32_t joystickMax = 4095;				//Max timit of the joystick determined by the bit value of the joystick
-	uint32_t lowerDeadZone = 2045;				//upper limit of the joystick when scrolling below
-	uint32_t higherDeadZone = 2050;				//lower limit of the joystick when scrolling above
+/*	MCU reminders
+cycle = 1 / Freq	-->	1 / 168MHz	=	5.95ns
 
-	//This is called ternary operation to check simple conditions
-	int8_t direction = (joystick > higherDeadZone) ? 1 : (joystick < lowerDeadZone) ? -1 : 0;
+									For 168MHz
+Operation	|	Cycles	|	Time
+Addition / Subtraction	|	1	|	5.95 ns
+Multiplication (32-bit)	|	1	|	5.95 ns
+Division (32-bit)		|2 – 12 |	12 – 71 ns
+bit shifting			|	1	|	5.95ns
+Array Access 			|	2	|	11.90 ns
+for loop condition check|	1	|	5.95 ns
 
-	float V_target;
-	if (direction == 1){	//forward
-		V_target = ((joystick - higherDeadZone) * maxTick) / (joystickMax - higherDeadZone);
-	}
-	else if (direction == -1){	//backward
-		V_target = ((lowerDeadZone - joystick) * maxTick) / lowerDeadZone;
-	}
-	else{	//when direction is 0 it means the joystick is within the deadzone so its centered
-		velocity = 1;	//goes error when timer becomes 0
-		__HAL_TIM_SET_COMPARE(htim,channel,velocity);
-		return;
-	}
- *
- *
- *
- *
- *
+
+for faster dividion use bit shifting. this can work on any number divisible by 2^n. this only outputs integers
+division = number>>9;	--> same as number/512
+
+
  */
 
 
@@ -1176,22 +1166,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called when
 }
 
 void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){	//LSE Timer ISR
-	ADCreadLSE = 1;
-}
-
-void HAL_ADC_ConvHalfCpltCallback(){	// Called when ADC buffer is half full
-	/*
-	The DMA replaces old reading when buffer if full
-	This can lead to "Race Condition" while code is still trying to read it
-	To fix this we must read the data while its still half ful
-	*/
-	if(!ADCreadLSE)return;
-	for (uint16_t i = 0; i <= 2048; i ++)
-	      {ADCsum += ADC_buffer[i];}
-
-}
-
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {	// Called when ADC buffer is completely filled}
 /*
  * Sampling time is calculated by:
  *
@@ -1201,15 +1175,27 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {	// Called when ADC buff
  * Sampling time = Conversion time * Cycle		-->	47.619ns * 156.5 cycles	= 7.452us per sample
  *
  * Make sure that an ISR is always below 50% time than the interrupt
+ * It takes 7.452us * 4096 = 30.523ms for the buffer to be full
  */
 
-	if(!ADCreadLSE)return;
-	for (uint16_t i = 2049; i <= 4095; i ++)
-	      {
-		ADCsum += ADC_buffer[i];
-	      }
-	ADC_reading = ADCsum/4096;
-	ADCreadLSE = 0;
+	for (uint16_t i = 0; i <= 4095; i ++)
+	      {ADCsum += ADC_buffer[i]; }
+	ADC_reading = ADCsum>>12;	// to make this faster use bitshift instead because 4096 is 2^n. this is same as ADCsum/4096
+
+/*
+ * loop checking	 = 5.95ns
+ * access array		 = 11.90ns
+ * addition			 = 5.95ns
+ * loop cycle		 = 23.8ns
+ * loop completion	 = 23.8ns * 4096 = 97.485us
+ * division			 = 5.95ns
+ * total time		 = 97.491us
+ */
+
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {	// Called when ADC buffer is completely filled}
+
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){	//EXTI ISR
