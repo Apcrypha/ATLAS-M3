@@ -114,8 +114,10 @@ HAL_StatusTypeDef status;
 
 
 volatile uint8_t MPUstatus = 0;			//read MPU value when 1
-uint8_t ADCstatus = 0;					//read ADC value when 1
+volatile uint8_t ADCreadLSE = 0;		//read ADC value LSE set it to 1
 volatile uint16_t ADC_reading = 0;
+volatile uint32_t ADCsum;				//stores the ISR ADC total
+volatile uint8_t ADCupdate = 0;			//when 1 updates the battery percentage
 
 uint16_t UGV_rightVelocity = 0;						//holder for current velocity is in pulse length for PWM
 uint16_t UGV_leftVelocity = 0;
@@ -307,6 +309,8 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
 	  if (MPUstatus) readMPU();
+
+	  moveServo();
 
       CRSF_Parser(ELRS_packet, &ELRS_Data);
 
@@ -1028,7 +1032,6 @@ void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
     // Directly assign if they are already in 172-1811 range
     ch[0] = input->batteryPercentage;
 
-
     // Fill unused channels with center value (992)
     for(int i = 1; i < 16; i++) ch[i] = 992;
 
@@ -1173,8 +1176,18 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called when
 }
 
 void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){	//LSE Timer ISR
-	ADCstatus = 1;
-	readBattery();
+	ADCreadLSE = 1;
+}
+
+void HAL_ADC_ConvHalfCpltCallback(){	// Called when ADC buffer is half full
+	/*
+	The DMA replaces old reading when buffer if full
+	This can lead to "Race Condition" while code is still trying to read it
+	To fix this we must read the data while its still half ful
+	*/
+	if(!ADCreadLSE)return;
+	for (uint16_t i = 0; i <= 2048; i ++)
+	      {ADCsum += ADC_buffer[i];}
 
 }
 
@@ -1190,15 +1203,13 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {	// Called when ADC buff
  * Make sure that an ISR is always below 50% time than the interrupt
  */
 
-	if(!ADCstatus)return;
-	uint32_t sum;
-	for (uint16_t i = 0; i <= 4095; i ++)
+	if(!ADCreadLSE)return;
+	for (uint16_t i = 2049; i <= 4095; i ++)
 	      {
-		sum += ADC_buffer[i];
+		ADCsum += ADC_buffer[i];
 	      }
-	ADC_reading = sum/4096;
-
-	ADCstatus = 0;
+	ADC_reading = ADCsum/4096;
+	ADCreadLSE = 0;
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){	//EXTI ISR
