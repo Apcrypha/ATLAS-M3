@@ -160,7 +160,7 @@ const uint8_t crsf_crc8_table[256] = {//Look up table for the CRC
 
 /*---------------------------------------------------------------------Modular settings------------------------------------------------*/
 /*All these Variables are changed only depending on the modular configuration*/
-uint8_t MODE = 0;	//0=UGV ||	1=UAV
+uint8_t MODE = 0;	//0=UGV ||	1=UAV		||	This is configured inside the MX_GPIO_Init();
 
 
 //For the controller
@@ -168,11 +168,6 @@ uint8_t MODE = 0;	//0=UGV ||	1=UAV
 
 //For UGV
 float UGV_k = 30.0f;	//Multiplier constant of the UGV
-
-
-
-
-
 
 
 
@@ -275,19 +270,20 @@ int main(void)
   //Start UART for ELRS
   HAL_UART_Receive_IT(&huart4, &rx_byte, 1);
 
+  if (Mode){//Only enable this when mode is UAV
+	  //disable this when MPU is disconnected because Error_Handler() causes a loop.
+	  status = MPU6500_Init();	//Initialize MPU6500
+	  if(status != HAL_OK){
+		  error = 1;
+		  Error_Handler();
+	  }
 
-	//disable this when MPU is disconnected because Error_Handler() causes a loop.
-  status = MPU6500_Init();	//Initialize MPU6500
-  if(status != HAL_OK){
-      error = 1;
-	  Error_Handler();
+	  status = MPU6500_EnableDataReadyInterrupts();	//Enable Interrupt pin
+	  if(status != HAL_OK){
+		  error = 2;
+		  Error_Handler();
+	  }
   }
-  status = MPU6500_EnableDataReadyInterrupts();	//Enable Interrupt pin
-  if(status != HAL_OK){
-	  error = 2;
-      Error_Handler();
-  }
-
 
   /* USER CODE END 2 */
 
@@ -859,46 +855,56 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOE_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7|GPIO_PIN_8, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, INA1_Pin|Debug_LED_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_9|GPIO_PIN_11, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, INB1_Pin|INB2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(INA2_GPIO_Port, INA2_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : PA7 PA8 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8;
+  /*Configure GPIO pins : INA1_Pin Debug_LED_Pin */
+  GPIO_InitStruct.Pin = INA1_Pin|Debug_LED_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PE8 */
-  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  /*Configure GPIO pin : IMU_INT_Pin */
+  GPIO_InitStruct.Pin = IMU_INT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(IMU_INT_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PE9 PE11 */
-  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_11;
+  /*Configure GPIO pins : INB1_Pin INB2_Pin */
+  GPIO_InitStruct.Pin = INB1_Pin|INB2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PC6 */
-  GPIO_InitStruct.Pin = GPIO_PIN_6;
+  /*Configure GPIO pin : INA2_Pin */
+  GPIO_InitStruct.Pin = INA2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  HAL_GPIO_Init(INA2_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : Mode_Switch_Pin */
+  GPIO_InitStruct.Pin = Mode_Switch_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(Mode_Switch_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
+  // Must configure the MODE after the PIN initialization
+  if (HAL_GPIO_ReadPin(Mode_Switch_GPIO_Port, Mode_Switch_Pin) == GPIO_PIN_SET) {
+        MODE = 1;
+    } else { MODE = 0;    }
 
   /* USER CODE END MX_GPIO_Init_2 */
 }
