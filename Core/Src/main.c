@@ -197,7 +197,7 @@ void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B
 
 void CRSF_Parser(uint8_t* packet, ELRS_data* input);
 void extractELRS(uint8_t* buf, uint16_t* ch);
-void bitMask(uint16_t ch1);
+uint8_t bitMask(uint16_t ch1);
 int ELRS_Encoder(float Input, float minInput, float maxInput);
 uint8_t crsf_crc8(uint8_t *ptr, uint8_t len);
 
@@ -270,7 +270,7 @@ int main(void)
   //Start UART for ELRS
   HAL_UART_Receive_IT(&huart4, &rx_byte, 1);
 
-  if (Mode){//Only enable this when mode is UAV
+  if (MODE){//Only enable this when mode is UAV
 	  //disable this when MPU is disconnected because Error_Handler() causes a loop.
 	  status = MPU6500_Init();	//Initialize MPU6500
 	  if(status != HAL_OK){
@@ -283,6 +283,7 @@ int main(void)
 		  error = 2;
 		  Error_Handler();
 	  }
+
   }
 
   /* USER CODE END 2 */
@@ -293,15 +294,33 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  switch (MODE){
+		  case 0 :	//UGV Mode-------------------------------------------------------------------------------
+			  moveServo();
 
-	  if (MPUstatus) readMPU();
+			  readBattery();
 
-	  moveServo();
+			  CRSF_Parser(ELRS_packet, &ELRS_Data);
 
-	  readBattery();
+			  break;
 
-      CRSF_Parser(ELRS_packet, &ELRS_Data);
 
+		  case 1 :	//UAV Mode------------------------------------------------------------------------------
+			  if (MPUstatus) readMPU();
+
+			  moveServo();
+
+			  readBattery();
+
+			  CRSF_Parser(ELRS_packet, &ELRS_Data);
+
+			  break;
+
+		  default:	//Error
+			  error = 6;
+			  Error_Handler();
+			  break;
+	  }
   }
   /* USER CODE END 3 */
 }
@@ -911,7 +930,7 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-void moveServo(){
+void moveServo(){// move the servo using received angle
 
 	if(!cameraMove)return;
 
@@ -921,7 +940,7 @@ void moveServo(){
 	setServoAngle(&htim3, TIM_CHANNEL_4, cameraAngle_Y);
 }
 
-void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){
+void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){//	sets the servo angle via timer PWM
 	/*Convert servo pulse time to timer counts
 	 *MCU Frequency = 168MHz
 	 *Prescaler = 167
@@ -938,7 +957,7 @@ void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){
 	__HAL_TIM_SET_COMPARE(htim,channel,pulse_length);	//write duty cycle to PWM
 }
 
-void readMPU(){
+void readMPU(){	//	reads the MPU values using the library
 	uint8_t int_status;
 	int16_t accel_x, accel_y, accel_z;
 	int16_t gyro_x, gyro_y, gyro_z;
@@ -968,7 +987,7 @@ void readMPU(){
 	MPUstatus = 0;
 }
 
-void readBattery(){//Converts ADC to battery percentage
+void readBattery(){//	Converts ADC to battery percentage
 	float maxVoltage = 3.029508;	//Max voltage of the Voltage divider
 	float minVoltage = 2.163934;
 
@@ -985,7 +1004,7 @@ void readBattery(){//Converts ADC to battery percentage
 	ELRS_Data.batteryPercentage = ELRS_Encoder(batPercentage,0,100);
 }
 
-void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, int16_t *V_target, uint16_t *V_current){
+void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, int16_t *V_target, uint16_t *V_current){// Sets the UGV speed with P controller
 
 	/*
 	  The equation used is discrete proportional (P) controller where:
@@ -1006,8 +1025,7 @@ void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, int16_t *V_target, 
 	__HAL_TIM_SET_COMPARE(htim,channel, *V_current);	//write duty cycle to PWM
 }
 
-void UGV_setDirection(GPIO_TypeDef *Port_A, uint16_t Pin_A, GPIO_TypeDef *Port_B, uint16_t Pin_B, int8_t *direction)
-{
+void UGV_setDirection(GPIO_TypeDef *Port_A, uint16_t Pin_A, GPIO_TypeDef *Port_B, uint16_t Pin_B, int8_t *direction){//	sets the UGV wheel direction with GPIOs
     if (*direction == 1) {
         HAL_GPIO_WritePin(Port_A, Pin_A, GPIO_PIN_SET);
         HAL_GPIO_WritePin(Port_B, Pin_B, GPIO_PIN_RESET);
@@ -1019,11 +1037,11 @@ void UGV_setDirection(GPIO_TypeDef *Port_A, uint16_t Pin_A, GPIO_TypeDef *Port_B
 
 }
 
-int ELRS_Encoder(float Input, float minInput, float maxInput){	//Convert values to ELRS range 172-1811
+int ELRS_Encoder(float Input, float minInput, float maxInput){	//	Convert float values to ELRS range 172-1811
 	return ((Input - minInput) * (1811 - 172) / (maxInput - minInput)) + 172;
 }
 
-void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
+void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//	CRSF parser converts the bytes to individual bits
     uint16_t ch[16];
 
     // --- MAPPING ---
@@ -1067,7 +1085,7 @@ void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//CRSF parser
     packet[25] = crsf_crc8(&packet[2], 23);
 }
 
-void extractELRS(uint8_t *buf, uint16_t *ch) {//Extracts the raw ELRS bits to values
+void extractELRS(uint8_t *buf, uint16_t *ch) {//	Extracts the raw ELRS bits to values
     // buf[0] is Address, buf[1] is Length, buf[2] is Type
     // The payload starts at buf[3]
 
@@ -1090,7 +1108,7 @@ void extractELRS(uint8_t *buf, uint16_t *ch) {//Extracts the raw ELRS bits to va
     ch[15] = ((uint16_t)buf[23] >> 5 | (uint16_t)buf[24] << 3)                      & 0x07FF;
 }
 
-uint8_t crsf_crc8(uint8_t *ptr, uint8_t len) {//Compute CRC for ELRS
+uint8_t crsf_crc8(uint8_t *ptr, uint8_t len) {//	Compute CRC for ELRS
 	uint8_t crc = 0;
 	    while (len--) {
 	        crc = crsf_crc8_table[crc ^ *ptr++];
@@ -1098,13 +1116,15 @@ uint8_t crsf_crc8(uint8_t *ptr, uint8_t len) {//Compute CRC for ELRS
 	    return crc;
 }
 
-void bitMask(uint16_t ch1){//decomposes the bits of channel 1 via bit masking
+uint8_t bitMask(uint16_t ch1){//	Decomposes the bits of channel 1 via bit masking
 	UGV_Controls.leftMotor_Dir 	 = ch1 & 1;
 	UGV_Controls.rightMotor_Dir  = (ch1 >> 1) & 1;
 	cameraMove					 = (ch1 >> 2) & 1;
+
+	return	(ch1 >> 9) & 1;
 }
 
-uint16_t dshot_prepare_packet(uint16_t value){//for dshot
+uint16_t dshot_prepare_packet(uint16_t value){//	For dshot
     uint16_t packet;
     uint8_t csum = 0;
     uint16_t csum_data;
@@ -1124,12 +1144,11 @@ uint16_t dshot_prepare_packet(uint16_t value){//for dshot
 
 //--------------------------------------------- ISR Functions---------------------------------
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//ISR when UART receives something
-    if (huart->Instance == UART4) {//checks if UART4
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//	ISR when UART receives something
+    if (huart->Instance == UART4) {//	Checks if UART4
         ELRS_buffer[rx_index++] = rx_byte;
 
         // 1. Check for Sync Byte (Address)
-        // ELRS Receiver typically sends 0xC8 to the Flight Controller
         if (ELRS_buffer[0] != 0xC8 && ELRS_buffer[0] != 0xEE) {
             rx_index = 0;
         }
@@ -1139,31 +1158,32 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//ISR when UART receive
             uint8_t computed_crc = crsf_crc8(&ELRS_buffer[2], 23);
 
             if (computed_crc == ELRS_buffer[25]) {
-                // SUCCESS! Unpack the bits into your struct
             	extractELRS(ELRS_buffer, channels);
-
                 // Map to variables
-            	bitMask(channels[0]);
-                cameraAngle_X = channels[1] - 172;	//deducts the 172 added by the controller
-                cameraAngle_Y = channels[2] - 172;
-                UGV_Controls.rightMotor    = channels[3];
-                UGV_Controls.leftMotor	   = channels[4];
-
+            	uint8_t mode = bitMask(channels[0]);
+            	if (mode){//	UAV
+                    cameraAngle_X = channels[1] - 172;	//deducts the 172 added by the controller
+                    cameraAngle_Y = channels[2] - 172;
+            	}
+            	else{//	UGV
+                    cameraAngle_X = channels[1] - 172;	//deducts the 172 added by the controller
+                    cameraAngle_Y = channels[2] - 172;
+                    UGV_Controls.rightMotor    = channels[3];
+                    UGV_Controls.leftMotor	   = channels[4];
+            	}
             }
-
             // Reset index for next packet
             rx_index = 0;
         }
-
         // IMPORTANT: Re-enable the interrupt for the next byte
         HAL_UART_Receive_IT(&huart4, &rx_byte, 1);
     }
 }
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called whenever there is an overflow on any timer
-	if (htim->Instance == TIM4){	//Checks if timer overflow is Timer 4
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){//	Gets called whenever there is an overflow on any timer
+	if (htim->Instance == TIM4){//	Checks if timer overflow is Timer 4
        //ISR every 5ms
-		if (!MODE)return;
+		if (!MODE)return;	//	If not UGV return
     	UGV_setDirection(GPIOC, GPIO_PIN_6, GPIOA, GPIO_PIN_7, &UGV_Controls.leftMotor_Dir);
     	UGV_setDirection(GPIOE, GPIO_PIN_11, GPIOE, GPIO_PIN_9, &UGV_Controls.rightMotor_Dir);
 
@@ -1173,7 +1193,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){	// Gets called when
     }
 }
 
-void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){	//LSE Timer ISR
+void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){//	LSE Timer ISR
 /*
  * Sampling time is calculated by:
  *
@@ -1186,8 +1206,9 @@ void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){	//LSE Timer IS
  * It takes 7.452us * 4096 = 30.523ms for the buffer to be full
  */
 
-	for (uint16_t i = 0; i <= 4095; i ++)
-	      {ADCsum += ADC_buffer[i]; }
+	for (uint16_t i = 0; i <= 4095; i ++){
+		ADCsum += ADC_buffer[i];
+	}
 	ADC_reading = ADCsum>>12;	// to make this faster use bitshift instead because 4096 is 2^n. this is same as ADCsum/4096
 
 /*
@@ -1202,11 +1223,7 @@ void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){	//LSE Timer IS
 
 }
 
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {	// Called when ADC buffer is completely filled}
-
-}
-
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){	//EXTI ISR
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){//	EXTI ISR
 	if(GPIO_Pin == GPIO_PIN_8){
 		MPUstatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
 	}
