@@ -304,7 +304,6 @@ int main(void)
 
 			  break;
 
-
 		  case 1 :	//UAV Mode------------------------------------------------------------------------------
 			  if (MPUstatus) readMPU();
 
@@ -1106,6 +1105,8 @@ void extractELRS(uint8_t *buf, uint16_t *ch) {//	Extracts the raw ELRS bits to v
     ch[13] = ((uint16_t)buf[20] >> 7 | (uint16_t)buf[21] << 1 | (uint16_t)buf[22] << 9) & 0x07FF;
     ch[14] = ((uint16_t)buf[22] >> 2 | (uint16_t)buf[23] << 6)                      & 0x07FF;
     ch[15] = ((uint16_t)buf[23] >> 5 | (uint16_t)buf[24] << 3)                      & 0x07FF;
+
+    //Takes ~112 Cycles. For 168MHz, about 666ns. via AI
 }
 
 uint8_t crsf_crc8(uint8_t *ptr, uint8_t len) {//	Compute CRC for ELRS
@@ -1241,6 +1242,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
+
   while (1)
   {
 
@@ -1259,6 +1261,14 @@ void Error_Handler(void)
 	    {
 	        HAL_Delay(500);
 	    }
+
+	    /*if error is fixed
+
+	     __enable_irq();
+	     return;
+
+	     */
+
   }
   /* USER CODE END Error_Handler_Debug */
 }
