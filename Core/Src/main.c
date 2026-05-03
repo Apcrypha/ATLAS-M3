@@ -65,6 +65,14 @@ typedef struct{	//Parameters to be sent by the ELRS
 }ELRS_data;
 
 
+typedef struct{
+
+	float Thrust;	//Must already be mapped from 0-1638
+	float Roll;		//Must already be mapped from -45deg to +45 deg. or whatever the max tilt of the drone is
+	float Pitch;	//Must already be mapped from -45deg to +45 deg. or whatever the max tilt of the drone is
+	float Yaw;		//Must already be mapped from -200deg/s to +200 deg/s. or whatever the max angular velocity of the drone is
+
+}UAV_controls;
 
 /* USER CODE END PTD */
 
@@ -99,11 +107,12 @@ DMA_HandleTypeDef hdma_tim5_ch4_trig;
 UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
+//Struct Initializations
 MPU_data MPU_Data;
 UGV_controls UGV_Controls;
+UAV_controls UAV_Controls;
 ELRS_data ELRS_Data;
 HAL_StatusTypeDef status;
-
 
 volatile uint8_t MPUstatus = 0;			//read MPU value when 1
 volatile uint16_t ADC_reading = 0;		//stores the ADC reading for battery percentage
@@ -171,6 +180,7 @@ uint8_t rx_byte;              // Holds the single byte currently arriving
 uint8_t rx_index = 0;         // Tracks where we are in the packet
 
 uint16_t channels[16];		//Temporary stores channel values here when receiving
+// Each payload channels can only have values ranging from 172 - 1811, which makes it a 1639 resolution
 
 const uint8_t crsf_crc8_table[256] = {//Look up table for the CRC
     0x00, 0xD5, 0x7F, 0xAA, 0xFE, 0x2B, 0x81, 0x54, 0x29, 0xFC, 0x56, 0x83, 0xD7, 0x02, 0xA8, 0x7D,
@@ -1205,6 +1215,12 @@ void complementaryFilter(){//	Filter noise vibrations from the MPU readings
 	 */
 }
 
+void UAV_PID(){
+
+
+
+
+}
 //---------------------------------------------------------------------------------------------- ISR Functions-------------------------------------------------------------------------------------------------------------------
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//	ISR when UART receives something
