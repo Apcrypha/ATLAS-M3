@@ -109,25 +109,52 @@ volatile uint8_t MPUstatus = 0;			//read MPU value when 1
 volatile uint16_t ADC_reading = 0;		//stores the ADC reading for battery percentage
 volatile uint32_t ADCsum;				//stores the ISR ADC total
 
-uint16_t UGV_rightVelocity = 0;						//holder for current velocity is in pulse length for PWM
-uint16_t UGV_leftVelocity = 0;
-
 uint8_t cameraAngle_X = 90;
 uint8_t cameraAngle_Y = 90;
-
 uint8_t cameraMove	= 0;		//Functions as a software interrupt. Only when this becomes 1 does the moveServo() run
 
 uint8_t errorMax = 10;
 uint8_t error = 0;				//Each number corresponds to different errors
 
 #define maxUGV_Tick 1679								//set by the 20Khz counter
-#define bufferSize 4096	// The amount of ADC reading to store
-#define DSHOT_PERIOD 280		//for dshot600 280ticks per period
-#define DSHOT_1      210		//for dshot600 logic HIGH
-#define DSHOT_0      105		//for dshot600 logic LOW
+#define bufferSize 4096				// The amount of ADC reading to store
+#define DSHOT_PERIOD 280			// for dshot600 280ticks per period
+#define DSHOT_1      210			// for dshot600 logic HIGH
+#define DSHOT_0      105			// for dshot600 logic LOW
+#define RAD_TO_DEG 57.29577951f		// Equivalent to 180/pi
 
 
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
+
+//----------------------------------------------------UGV------------------------------------------------
+uint16_t UGV_rightVelocity = 0;						//holder for current velocity is in pulse length for PWM
+uint16_t UGV_leftVelocity = 0;
+
+
+
+
+
+
+
+
+
+
+
+
+
+//------------------------------------------------UAV-------------------------------------------------
+float Raw_Roll_Angle;
+float Raw_Pitch_Angle;
+
+float Filtered_Roll_Angle;
+float Filtered_Pitch_Angle;
+float Filtered_Yaw_Angle;
+
+
+
+
+
+
 
 //-----------------------------------------------ELRS & CRSF---------------------------------
 uint8_t ELRS_buffer[26];	//Received ELRS raw bits will be saved here
@@ -1143,7 +1170,23 @@ uint16_t dshot_prepare_packet(uint16_t value){//	For dshot
     return packet;
 }
 
-//--------------------------------------------- ISR Functions---------------------------------
+void complementaryFilter(){//	Filter noise vibrations from the MPU readings
+
+	Raw_Roll_Angle = atan2f(MPU_Data.aY, MPU_Data.aZ) * RAD_TO_DEG;
+
+	float magnitude =  sqrtf((MPU_Data.aY * MPU_Data.aY) + (MPU_Data.aZ * MPU_Data.aZ));
+
+	Raw_Pitch_Angle = atan2f(-MPU_Data.aZ, magnitude) * RAD_TO_DEG;
+
+	/* Because all are float the FPU of the STM32 is utilized so it will be faster
+	 * atan2f() takes about 70-120 cycles
+	 * Overall upto this point the code takes about 250 - 300 cycles --> 1.5 - 1.8 us
+	 */
+
+
+}
+
+//---------------------------------------------------------------------------------------------- ISR Functions-------------------------------------------------------------------------------------------------------------------
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//	ISR when UART receives something
     if (huart->Instance == UART4) {//	Checks if UART4
