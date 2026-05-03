@@ -116,13 +116,14 @@ uint8_t cameraMove	= 0;		//Functions as a software interrupt. Only when this bec
 uint8_t errorMax = 10;
 uint8_t error = 0;				//Each number corresponds to different errors
 
-#define maxUGV_Tick 1679								//set by the 20Khz counter
+//Permanent Values that can't and should'nt be changed
+#define maxUGV_Tick 1679			//set by the 20Khz counter
 #define bufferSize 4096				// The amount of ADC reading to store
 #define DSHOT_PERIOD 280			// for dshot600 280ticks per period
 #define DSHOT_1      210			// for dshot600 logic HIGH
 #define DSHOT_0      105			// for dshot600 logic LOW
 #define RAD_TO_DEG 57.29577951f		// Equivalent to 180/pi
-
+#define dt			0.001f			// loop time for the PID (s). Must be same with set timer.
 
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
 
@@ -143,6 +144,9 @@ uint16_t UGV_leftVelocity = 0;
 
 
 //------------------------------------------------UAV-------------------------------------------------
+float filter_Alpha = 0.998;			// Alpha used for the complementary Filter
+float filter_Beta  = 1 - filter_Alpha;
+
 float Raw_Roll_Angle;
 float Raw_Pitch_Angle;
 
@@ -150,6 +154,9 @@ float Filtered_Roll_Angle;
 float Filtered_Pitch_Angle;
 float Filtered_Yaw_Angle;
 
+float Last_Filtered_Roll_Angle = 0;
+float Last_Filtered_Pitch_Angle = 0;
+float Last_Filtered_Yaw_Angle = 0;
 
 
 
@@ -1183,6 +1190,15 @@ void complementaryFilter(){//	Filter noise vibrations from the MPU readings
 	 * Overall upto this point the code takes about 250 - 300 cycles --> 1.5 - 1.8 us
 	 */
 
+	Filtered_Roll_Angle = (filter_Alpha *(Last_Filtered_Roll_Angle + (MPU_Data.gX * dt) ) ) + ( (filter_Beta) * Raw_Roll_Angle);
+
+	Filtered_Pitch_Angle = (filter_Alpha *(Last_Filtered_Pitch_Angle + (MPU_Data.gY * dt) ) ) + ( (filter_Beta) * Raw_Pitch_Angle);
+
+	Filtered_Yaw_Angle = Last_Filtered_Yaw_Angle + (MPU_Data.gZ * dt);
+
+	Last_Filtered_Roll_Angle  = Filtered_Roll_Angle;
+	Last_Filtered_Pitch_Angle = Filtered_Pitch_Angle;
+	Last_Filtered_Yaw_Angle   = Filtered_Yaw_Angle;
 
 }
 
