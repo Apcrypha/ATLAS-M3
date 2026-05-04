@@ -332,6 +332,11 @@ int main(void)
 		  Error_Handler();
 	  }
 
+	  	  	HAL_Delay(10);  // Give the MPU 10ms to take its first reading
+	        readMPU();      // Force a manual read to pull the INT pin LOW
+	        MPUstatus = 0;  // Reset your flag so the EXTI line is ready
+	        error = 0;      // Clear any setup hiccups
+
   }
 
   /* USER CODE END 2 */
@@ -342,6 +347,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
 	  switch (MODE){
 		  case 0 :	//UGV Mode-------------------------------------------------------------------------------
 			  moveServo();
@@ -493,7 +499,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.ClockSpeed = 400000;
   hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
@@ -1011,23 +1017,28 @@ void readMPU(){	//	reads the MPU values using the library
 	int16_t accel_x, accel_y, accel_z;
 	int16_t gyro_x, gyro_y, gyro_z;
 
+	MPUstatus = 0;
+
 	//Acknowledge that the INP pin was received.
 	if(HAL_I2C_Mem_Read(&hi2c1, (0x68 << 1), 0x3A, I2C_MEMADD_SIZE_8BIT, &int_status, 1, 100) != HAL_OK){
-			MPUstatus = 0;
-			return;
+		error = 3;
+		MPUstatus = 0;
+		return;
 		}
 
 	// Read raw sensor data
 	status = MPU6500_ReadAccel(&accel_x, &accel_y, &accel_z);
 	if(status != HAL_OK){
-			MPUstatus = 0;
-			return;
+		error=4;
+		MPUstatus = 0;
+		return;
 		}
 
 	status = MPU6500_ReadGyro(&gyro_x, &gyro_y, &gyro_z);
 	if(status != HAL_OK){
-			MPUstatus = 0;
-			return;
+		error=5;
+		MPUstatus = 0;
+		return;
 		}
 
 	// Convert raw data to physical units
@@ -1042,7 +1053,7 @@ void readMPU(){	//	reads the MPU values using the library
 	MPU_Data.gY = gyro_y / 16.4f;
 	MPU_Data.gZ = gyro_z / 16.4f;
 
-	MPUstatus = 0;
+
 }
 
 void readBattery(){//	Converts ADC to battery percentage
