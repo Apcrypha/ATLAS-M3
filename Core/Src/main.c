@@ -99,10 +99,6 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim5;
-DMA_HandleTypeDef hdma_tim5_ch1;
-DMA_HandleTypeDef hdma_tim5_ch2;
-DMA_HandleTypeDef hdma_tim5_ch3_up;
-DMA_HandleTypeDef hdma_tim5_ch4_trig;
 
 UART_HandleTypeDef huart4;
 
@@ -123,7 +119,8 @@ uint8_t cameraAngle_Y = 90;
 uint8_t cameraMove	= 0;		//Functions as a software interrupt. Only when this becomes 1 does the moveServo() run
 
 uint8_t errorMax = 10;
-uint8_t error = 0;				//Each number corresponds to different errors
+uint32_t error = 0;				//Each number corresponds to different errors
+
 
 //Permanent Values that can't and should'nt be changed
 #define maxUGV_Tick 1679			//set by the 20Khz counter
@@ -300,12 +297,12 @@ int main(void)
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 
- // HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&ADC_buffer, bufferSize);	//Start the ADC and tell the DMA to where to store the data
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&ADC_buffer, bufferSize);	//Start the ADC and tell the DMA to where to store the data
 
- // HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 10240, RTC_WAKEUPCLOCK_RTCCLK_DIV16);	//Start the LSE Timer
+  HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 10240, RTC_WAKEUPCLOCK_RTCCLK_DIV16);	//Start the LSE Timer
 
   //Start timer 4
- // HAL_TIM_Base_Start_IT(&htim4);
+  HAL_TIM_Base_Start_IT(&htim4);
 
   //Starts timer for motor driver
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
@@ -323,19 +320,14 @@ int main(void)
 	  status = MPU6500_Init();	//Initialize MPU6500
 	  if(status != HAL_OK){
 		  error = 1;
-		  Error_Handler();
+		 // Error_Handler();
 	  }
 
 	  status = MPU6500_EnableDataReadyInterrupts();	//Enable Interrupt pin
 	  if(status != HAL_OK){
 		  error = 2;
-		  Error_Handler();
+		 // Error_Handler();
 	  }
-
-	  	  	HAL_Delay(10);  // Give the MPU 10ms to take its first reading
-	        readMPU();      // Force a manual read to pull the INT pin LOW
-	        MPUstatus = 0;  // Reset your flag so the EXTI line is ready
-	        error = 0;      // Clear any setup hiccups
 
   }
 
@@ -359,7 +351,7 @@ int main(void)
 			  break;
 
 		  case 1 :	//UAV Mode------------------------------------------------------------------------------
-			  if (MPUstatus) readMPU();
+			  if (MPUstatus)readMPU();
 
 			 // moveServo();
 
@@ -389,8 +381,6 @@ void SystemClock_Config(void)
 
   /** Configure the main internal regulator output voltage
   */
-  __HAL_RCC_PWR_CLK_ENABLE();
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -885,24 +875,10 @@ static void MX_DMA_Init(void)
 {
 
   /* DMA controller clock enable */
-  __HAL_RCC_DMA1_CLK_ENABLE();
-  __HAL_RCC_DMA2_CLK_ENABLE();
 
   /* DMA interrupt init */
-  /* DMA1_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
-  /* DMA1_Stream1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);
-  /* DMA1_Stream2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream2_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream2_IRQn);
-  /* DMA1_Stream4_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream4_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream4_IRQn);
   /* DMA2_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 14, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 
 }
@@ -920,11 +896,6 @@ static void MX_GPIO_Init(void)
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOC_CLK_ENABLE();
-  __HAL_RCC_GPIOH_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOE_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, INA1_Pin|Debug_LED_Pin, GPIO_PIN_RESET);
@@ -945,7 +916,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : IMU_INT_Pin */
   GPIO_InitStruct.Pin = IMU_INT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(IMU_INT_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : INB1_Pin INB2_Pin */
@@ -969,7 +940,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(Mode_Switch_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 4, 0);
   HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
@@ -1013,16 +984,15 @@ void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){//	
 }
 
 void readMPU(){	//	reads the MPU values using the library
+	MPUstatus = 0;
+
 	uint8_t int_status;
 	int16_t accel_x, accel_y, accel_z;
 	int16_t gyro_x, gyro_y, gyro_z;
 
-	MPUstatus = 0;
-
 	//Acknowledge that the INP pin was received.
 	if(HAL_I2C_Mem_Read(&hi2c1, (0x68 << 1), 0x3A, I2C_MEMADD_SIZE_8BIT, &int_status, 1, 100) != HAL_OK){
 		error = 3;
-		MPUstatus = 0;
 		return;
 		}
 
@@ -1030,14 +1000,12 @@ void readMPU(){	//	reads the MPU values using the library
 	status = MPU6500_ReadAccel(&accel_x, &accel_y, &accel_z);
 	if(status != HAL_OK){
 		error=4;
-		MPUstatus = 0;
 		return;
 		}
 
 	status = MPU6500_ReadGyro(&gyro_x, &gyro_y, &gyro_z);
 	if(status != HAL_OK){
 		error=5;
-		MPUstatus = 0;
 		return;
 		}
 
@@ -1052,7 +1020,6 @@ void readMPU(){	//	reads the MPU values using the library
 	MPU_Data.gX = gyro_x / 16.4f;
 	MPU_Data.gY = gyro_y / 16.4f;
 	MPU_Data.gZ = gyro_z / 16.4f;
-
 
 }
 
@@ -1243,10 +1210,9 @@ void complementaryFilter(){//	Filter noise vibrations from the MPU readings
 
 void UAV_PID(){
 
-
-
-
 }
+
+
 //---------------------------------------------------------------------------------------------- ISR Functions-------------------------------------------------------------------------------------------------------------------
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//	ISR when UART receives something
@@ -1310,11 +1276,14 @@ void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){//	LSE Timer IS
  * Make sure that an ISR is always below 50% time than the interrupt
  * It takes 7.452us * 4096 = 30.523ms for the buffer to be full
  */
+
+	/*
 	ADCsum = 0;	//resets the sum after evry call
 	for (uint16_t i = 0; i <= 4095; i ++){
 		ADCsum += ADC_buffer[i];
 	}
 	ADC_reading = ADCsum>>12;	// to make this faster use bitshift instead because 4096 is 2^n. this is same as ADCsum/4096
+	 */
 
 /*
  * loop checking	 = 5.95ns
@@ -1330,6 +1299,7 @@ void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){//	LSE Timer IS
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){//	EXTI ISR
 	if(GPIO_Pin == IMU_INT_Pin){
+		error+=1;
 		MPUstatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
 	}
 }
