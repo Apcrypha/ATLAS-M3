@@ -180,7 +180,7 @@ uint8_t rx_byte;              // Holds the single byte currently arriving
 uint8_t rx_index = 0;         // Tracks where we are in the packet
 
 uint16_t channels[16];		//Temporary stores channel values here when receiving
-// Each payload channels can only have values ranging from 172 - 1811, which makes it a 1639 resolution
+// Each payload channels can only have values ranging from 172 - 1811, which makes it a 1640 resolution
 
 const uint8_t crsf_crc8_table[256] = {//Look up table for the CRC
     0x00, 0xD5, 0x7F, 0xAA, 0xFE, 0x2B, 0x81, 0x54, 0x29, 0xFC, 0x56, 0x83, 0xD7, 0x02, 0xA8, 0x7D,
@@ -204,8 +204,12 @@ const uint8_t crsf_crc8_table[256] = {//Look up table for the CRC
 
 /*---------------------------------------------------------------------Modular settings------------------------------------------------*/
 /*All these Variables are changed only depending on the modular configuration*/
-uint8_t MODE = 0;	//0=UGV ||	1=UAV		||	This is configured inside the MX_GPIO_Init();
-
+uint8_t MODE = 1;	//0=UGV ||	1=UAV
+/*
+ * This is configured inside the MX_GPIO_Init();
+ *
+ * for testing make sure to disable the algorithm inside MX_GPIO_Init(), so it doesnt pull the mode to 0 without a switch
+ */
 
 //For the controller
 
@@ -296,12 +300,12 @@ int main(void)
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 
-  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&ADC_buffer, bufferSize);	//Start the ADC and tell the DMA to where to store the data
+ // HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&ADC_buffer, bufferSize);	//Start the ADC and tell the DMA to where to store the data
 
-  HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 10240, RTC_WAKEUPCLOCK_RTCCLK_DIV16);	//Start the LSE Timer
+ // HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 10240, RTC_WAKEUPCLOCK_RTCCLK_DIV16);	//Start the LSE Timer
 
   //Start timer 4
-  HAL_TIM_Base_Start_IT(&htim4);
+ // HAL_TIM_Base_Start_IT(&htim4);
 
   //Starts timer for motor driver
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
@@ -311,8 +315,8 @@ int main(void)
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
 
-  //Start UART for ELRS
-  HAL_UART_Receive_IT(&huart4, &rx_byte, 1);
+  //Start UART for ELRS		||	remove this when ELRS is not connected to avoid unintentional ISR firing
+  //HAL_UART_Receive_IT(&huart4, &rx_byte, 1);
 
   if (MODE){//Only enable this when mode is UAV
 	  //disable this when MPU is disconnected because Error_Handler() causes a loop.
@@ -351,11 +355,11 @@ int main(void)
 		  case 1 :	//UAV Mode------------------------------------------------------------------------------
 			  if (MPUstatus) readMPU();
 
-			  moveServo();
+			 // moveServo();
 
-			  readBattery();
+			 // readBattery();
 
-			  CRSF_Parser(ELRS_packet, &ELRS_Data);
+			 // CRSF_Parser(ELRS_packet, &ELRS_Data);
 
 			  break;
 
@@ -964,10 +968,12 @@ static void MX_GPIO_Init(void)
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   // Must configure the MODE after the PIN initialization
+
+  /*
   if (HAL_GPIO_ReadPin(Mode_Switch_GPIO_Port, Mode_Switch_Pin) == GPIO_PIN_SET) {
         MODE = 1;
     } else { MODE = 0;    }
-
+*/
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
@@ -1262,7 +1268,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//	ISR when UART receiv
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){//	Gets called whenever there is an overflow on any timer
 	if (htim->Instance == TIM4){//	Checks if timer overflow is Timer 4
        //ISR every 5ms
-		if (!MODE)return;	//	If not UGV return
+		if (MODE)return;	//	If not UGV return
     	UGV_setDirection(GPIOC, GPIO_PIN_6, GPIOA, GPIO_PIN_7, &UGV_Controls.leftMotor_Dir);
     	UGV_setDirection(GPIOE, GPIO_PIN_11, GPIOE, GPIO_PIN_9, &UGV_Controls.rightMotor_Dir);
 
@@ -1284,7 +1290,7 @@ void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){//	LSE Timer IS
  * Make sure that an ISR is always below 50% time than the interrupt
  * It takes 7.452us * 4096 = 30.523ms for the buffer to be full
  */
-
+	ADCsum = 0;	//resets the sum after evry call
 	for (uint16_t i = 0; i <= 4095; i ++){
 		ADCsum += ADC_buffer[i];
 	}
@@ -1303,7 +1309,7 @@ void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){//	LSE Timer IS
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){//	EXTI ISR
-	if(GPIO_Pin == GPIO_PIN_8){
+	if(GPIO_Pin == IMU_INT_Pin){
 		MPUstatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
 	}
 }
@@ -1319,11 +1325,12 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
-  __disable_irq();
+
+ // __disable_irq();	//This thing disables the sytem tick so blinking LED doesnt work
 
   while (1)
   {
-
+/*
 	    // Blink error times
 	    for (uint8_t i = 0; i < error; i++)
 	    {
@@ -1340,13 +1347,8 @@ void Error_Handler(void)
 	        HAL_Delay(500);
 	    }
 
-	    /*if error is fixed
-
-	     __enable_irq();
-	     return;
 
 	     */
-
   }
   /* USER CODE END Error_Handler_Debug */
 }
