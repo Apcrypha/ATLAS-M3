@@ -1012,14 +1012,23 @@ void readMPU(){	//	reads the MPU values using the library
 	int16_t gyro_x, gyro_y, gyro_z;
 
 	//Acknowledge that the INP pin was received.
-	HAL_I2C_Mem_Read(&hi2c1, (0x68 << 1), 0x3A, I2C_MEMADD_SIZE_8BIT, &int_status, 1, 100);
+	if(HAL_I2C_Mem_Read(&hi2c1, (0x68 << 1), 0x3A, I2C_MEMADD_SIZE_8BIT, &int_status, 1, 100) != HAL_OK){
+			MPUstatus = 0;
+			return;
+		}
 
 	// Read raw sensor data
 	status = MPU6500_ReadAccel(&accel_x, &accel_y, &accel_z);
-	if(status != HAL_OK){ Error_Handler();	}
+	if(status != HAL_OK){
+			MPUstatus = 0;
+			return;
+		}
 
 	status = MPU6500_ReadGyro(&gyro_x, &gyro_y, &gyro_z);
-	if(status != HAL_OK){ Error_Handler();	}
+	if(status != HAL_OK){
+			MPUstatus = 0;
+			return;
+		}
 
 	// Convert raw data to physical units
 	// For ±8g range: 1g = 4096 LSB
