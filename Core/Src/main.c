@@ -135,6 +135,7 @@ uint32_t error = 0;				//Each number corresponds to different errors
 
 #define RAD_TO_DEG 57.29577951f		// Equivalent to 180/pi
 #define UAV_loopTime	1/184		// loop time for the PID (s). Must be same with MPU INT.
+#define UAV_loopTime_INV 184.0f		// Inverse of the loop time. specifically use this to save time when we want to divide a variable with the loopTime and since division uses 12 cycles while multiplication only uses 1
 #define K_outer			1.0f		// Gain for the Outer PID
 #define Kp_inner		0.1f		// P gain for the Inner PID
 #define Ki_inner		0.1f		// I gain for the Inner PID
@@ -162,20 +163,19 @@ uint16_t UGV_leftVelocity = 0;
 float filter_Alpha = 0.998;			// Alpha used for the complementary Filter
 float filter_Beta  = 0.02;			// 1 - filter_Alpha
 
-float Raw_Roll_Angle;
-float Raw_Pitch_Angle;
-
 float Filtered_Roll_Angle;
 float Filtered_Pitch_Angle;
-float Filtered_Yaw_Angle;
 
 float Last_Filtered_Roll_Angle;
 float Last_Filtered_Pitch_Angle;
-float Last_Filtered_Yaw_Angle;
 
 float RollError;
 float PitchError;
 float YawError;
+
+float last_gX;
+float last_gY;
+float last_gZ;
 
 float Last_Roll_I;		//Previously calculated Roll Integral of the PID
 float Last_Pitch_I;		//Previously calculated PitchIntegral of the PID
@@ -184,6 +184,7 @@ float Last_Yaw_I;		//Previously calculated Yaw of the PID
 float Total_Roll;		//The Roll value after the PID
 float Total_Pitch;		//The Pitch value after the PID
 float Total_Yaw;		//The Yaw value after the PID
+
 
 
 
@@ -266,6 +267,8 @@ uint8_t crsf_crc8(uint8_t *ptr, uint8_t len);
 void readBattery();
 
 void complementaryFilter();
+void UAV_error();
+void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_gyro);
 
 /* USER CODE END PFP */
 
@@ -372,6 +375,11 @@ int main(void)
 			  if (MPUstatus){
 				  readMPU();
 				  complementaryFilter();
+				  UAV_error();
+				  UAV_PID(&Total_Roll, RollError, &Last_Roll_I, MPU_Data.gX, &last_gX);		//Roll 	PID
+				  UAV_PID(&Total_Pitch, PitchError, &Last_Pitch_I, MPU_Data.gY, &last_gY); 	//Pitch PID
+				  UAV_PID(&Total_Yaw, YawError, &Last_Yaw_I, MPU_Data.gZ, &last_gZ);		//Yaw	PID
+
 			  }
 
 			  moveServo();
@@ -1208,11 +1216,11 @@ uint16_t dshot_prepare_packet(uint16_t value){//	For dshot
 
 void complementaryFilter(){//	Filter noise vibrations from the MPU readings
 
-	Raw_Roll_Angle = atan2f(MPU_Data.aY, MPU_Data.aZ) * RAD_TO_DEG;
+	float Raw_Roll_Angle = atan2f(MPU_Data.aY, MPU_Data.aZ) * RAD_TO_DEG;
 
 	float magnitude =  sqrtf((MPU_Data.aY * MPU_Data.aY) + (MPU_Data.aZ * MPU_Data.aZ));
 
-	Raw_Pitch_Angle = atan2f(-MPU_Data.aZ, magnitude) * RAD_TO_DEG;
+	float Raw_Pitch_Angle = atan2f(-MPU_Data.aZ, magnitude) * RAD_TO_DEG;
 
 	/* Because all are float the FPU of the STM32 is utilized so it will be faster
 	 * atan2f() takes about 70-120 cycles
@@ -1223,11 +1231,8 @@ void complementaryFilter(){//	Filter noise vibrations from the MPU readings
 
 	Filtered_Pitch_Angle = (filter_Alpha *(Last_Filtered_Pitch_Angle + (MPU_Data.gY * UAV_loopTime) ) ) + ( (filter_Beta) * Raw_Pitch_Angle);
 
-	Filtered_Yaw_Angle = Last_Filtered_Yaw_Angle + (MPU_Data.gZ * UAV_loopTime);
-
 	Last_Filtered_Roll_Angle  = Filtered_Roll_Angle;
 	Last_Filtered_Pitch_Angle = Filtered_Pitch_Angle;
-	Last_Filtered_Yaw_Angle   = Filtered_Yaw_Angle;
 	/* From the 2nd Half it will take ~40 cycles	--> .24us
 	 *
 	 * The whole Function takes about 290 - 340 cycles --> 1.7 - 2us
@@ -1237,7 +1242,7 @@ void complementaryFilter(){//	Filter noise vibrations from the MPU readings
 void UAV_error(){//	Computes the errors of the angles
 	/* This part is the Outer PID
 	 *
-	 * This takes about 20 cycles --> 120 ns
+	 * This takes about 50 cycles --> 297.5 ns
 	 */
 	float Rate_Roll_Target = K_outer * (UAV_Controls.Roll - Filtered_Roll_Angle);
 	float Rate_Pitch_Target = K_outer * (UAV_Controls.Pitch - Filtered_Pitch_Angle);
@@ -1249,18 +1254,25 @@ void UAV_error(){//	Computes the errors of the angles
 
 }
 
-void UAV_PID(float *Total, float error, float *last_I, float gyro, float last_gyro){ // format: Axis(Roll,Pitch,Yaw) , error , last integral , Current gyro axis reading , last gyro axis reading
+void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_gyro){ // format: Axis(Roll,Pitch,Yaw) , error , last integral , Current gyro axis reading , last gyro axis reading
 
 	float Proportional = Kp_inner * error;
 	float Integral = *last_I + (Ki_inner * error * UAV_loopTime);
-	float Derivative = -Kd_inner * ( (gyro - last_gyro) / UAV_loopTime);
+	float Derivative = -Kd_inner * ( (gyro - *last_gyro)* UAV_loopTime_INV);
 
 	*Total = Proportional + Integral + Derivative;
 
+	*last_gyro = gyro;
 	*last_I = Integral;
+
+	// Takes about 35 - 50 cycles --> 208 - 298 ns
 
 }
 
+void UAV_Thrust(){
+
+
+}
 
 //---------------------------------------------------------------------------------------------- ISR Functions-------------------------------------------------------------------------------------------------------------------
 
