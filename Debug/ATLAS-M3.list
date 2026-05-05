@@ -466,6 +466,7 @@ int main(void)
  8000568:	781b      	ldrb	r3, [r3, #0]
  800056a:	2b00      	cmp	r3, #0
  800056c:	d019      	beq.n	80005a2 <main+0xae>
+	  // when connecting to STM32 make sure to use the 3v3 source so it minimizes the noise
 	  //disable this when MPU is disconnected because Error_Handler() causes a loop.
 	  status = MPU6500_Init();	//Initialize MPU6500
  800056e:	f001 fe66 	bl	800223e <MPU6500_Init>
@@ -3704,6 +3705,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){//	EXTI ISR
  8001ab2:	88fb      	ldrh	r3, [r7, #6]
  8001ab4:	f5b3 7f80 	cmp.w	r3, #256	@ 0x100
  8001ab8:	d102      	bne.n	8001ac0 <HAL_GPIO_EXTI_Callback+0x18>
+		//error+=1;
 		MPUstatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
  8001aba:	4b04      	ldr	r3, [pc, #16]	@ (8001acc <HAL_GPIO_EXTI_Callback+0x24>)
  8001abc:	2201      	movs	r2, #1

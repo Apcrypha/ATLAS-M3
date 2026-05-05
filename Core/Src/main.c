@@ -316,6 +316,7 @@ int main(void)
   //HAL_UART_Receive_IT(&huart4, &rx_byte, 1);
 
   if (MODE){//Only enable this when mode is UAV
+	  // when connecting to STM32 make sure to use the 3v3 source so it minimizes the noise
 	  //disable this when MPU is disconnected because Error_Handler() causes a loop.
 	  status = MPU6500_Init();	//Initialize MPU6500
 	  if(status != HAL_OK){
@@ -1304,6 +1305,7 @@ void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){//	LSE Timer IS
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){//	EXTI ISR
 	if(GPIO_Pin == IMU_INT_Pin){
+		//error+=1;
 		MPUstatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
 	}
 }
