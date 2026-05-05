@@ -47,7 +47,7 @@ typedef struct{//MPU struct
 
 }MPU_data;
 
-typedef struct{ //Joystick values for the Ground vehicle
+typedef struct{ //UGV Controls
 	//Joystick values must already be normalized from 0-8399
 
 	int16_t leftMotor;
@@ -64,8 +64,7 @@ typedef struct{	//Parameters to be sent by the ELRS
 
 }ELRS_data;
 
-
-typedef struct{
+typedef struct{ //UAV Controls
 
 	float Thrust;	//Must already be mapped from 0-1638
 	float Roll;		//Must already be mapped from -45deg to +45 deg. or whatever the max tilt of the drone is
@@ -123,13 +122,23 @@ uint32_t error = 0;				//Each number corresponds to different errors
 
 
 //Permanent Values that can't and should'nt be changed
-#define maxUGV_Tick 1679			//set by the 20Khz counter
+
 #define bufferSize 4096				// The amount of ADC reading to store
+
 #define DSHOT_PERIOD 280			// for dshot600 280ticks per period
 #define DSHOT_1      210			// for dshot600 logic HIGH
 #define DSHOT_0      105			// for dshot600 logic LOW
+
+#define maxUGV_Tick 1679			//set by the 20Khz counter
+#define UGV_loopTime	0.005f		// loop time for the P (s). Must be same with Timer.
+#define UGV_k 			30.0f		// P gain of the UGV
+
 #define RAD_TO_DEG 57.29577951f		// Equivalent to 180/pi
-#define loopTime	0.001f			// loop time for the PID (s). Must be same with set timer.
+#define UAV_loopTime	1/184		// loop time for the PID (s). Must be same with MPU INT.
+#define K_outer			1.0f		// Gain for the Outer PID
+#define Kp_inner		0.1f		// P gain for the Inner PID
+#define Ki_inner		0.1f		// I gain for the Inner PID
+#define Kd_inner		0.001f		// D gain for the Inner PID
 
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
 
@@ -160,12 +169,21 @@ float Filtered_Roll_Angle;
 float Filtered_Pitch_Angle;
 float Filtered_Yaw_Angle;
 
-float Last_Filtered_Roll_Angle = 0;
-float Last_Filtered_Pitch_Angle = 0;
-float Last_Filtered_Yaw_Angle = 0;
+float Last_Filtered_Roll_Angle;
+float Last_Filtered_Pitch_Angle;
+float Last_Filtered_Yaw_Angle;
 
+float RollError;
+float PitchError;
+float YawError;
 
+float Last_Roll_I;		//Previously calculated Roll Integral of the PID
+float Last_Pitch_I;		//Previously calculated PitchIntegral of the PID
+float Last_Yaw_I;		//Previously calculated Yaw of the PID
 
+float Total_Roll;		//The Roll value after the PID
+float Total_Pitch;		//The Pitch value after the PID
+float Total_Yaw;		//The Yaw value after the PID
 
 
 
@@ -212,7 +230,6 @@ uint8_t MODE = 1;	//0=UGV ||	1=UAV
 
 
 //For UGV
-float UGV_k = 30.0f;	//Multiplier constant of the UGV
 
 
 
@@ -243,10 +260,12 @@ void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B
 void CRSF_Parser(uint8_t* packet, ELRS_data* input);
 void extractELRS(uint8_t* buf, uint16_t* ch);
 uint8_t bitMask(uint16_t ch1);
-int ELRS_Encoder(float Input, float minInput, float maxInput);
+int ELRS_Map(float Input, float minInput, float maxInput);
 uint8_t crsf_crc8(uint8_t *ptr, uint8_t len);
 
 void readBattery();
+
+void complementaryFilter();
 
 /* USER CODE END PFP */
 
@@ -321,13 +340,11 @@ int main(void)
 	  status = MPU6500_Init();	//Initialize MPU6500
 	  if(status != HAL_OK){
 		  error = 1;
-		 // Error_Handler();
 	  }
 
 	  status = MPU6500_EnableDataReadyInterrupts();	//Enable Interrupt pin
 	  if(status != HAL_OK){
 		  error = 2;
-		 // Error_Handler();
 	  }
 
   }
@@ -352,11 +369,14 @@ int main(void)
 			  break;
 
 		  case 1 :	//UAV Mode------------------------------------------------------------------------------
-			  if (MPUstatus)readMPU();
+			  if (MPUstatus){
+				  readMPU();
+				  complementaryFilter();
+			  }
 
-			 // moveServo();
+			  moveServo();
 
-			 // readBattery();
+			  readBattery();
 
 			 // CRSF_Parser(ELRS_packet, &ELRS_Data);
 
@@ -1043,7 +1063,7 @@ void readBattery(){//	Converts ADC to battery percentage
 	//Convert to battery percentage
 	float batPercentage = ( (readingVoltage - minVoltage) * 100 ) / (maxVoltage - minVoltage);
 
-	ELRS_Data.batteryPercentage = ELRS_Encoder(batPercentage,0,100);
+	ELRS_Data.batteryPercentage = ELRS_Map(batPercentage,0,100);
 }
 
 void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, int16_t *V_target, uint16_t *V_current){// Sets the UGV speed with P controller
@@ -1062,7 +1082,7 @@ void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, int16_t *V_target, 
 
 	float acceleration = UGV_k * error;
 
-	*V_current += acceleration * loopTime + 2; //2 is used as a bias to prevent a zero timer
+	*V_current += acceleration * UGV_loopTime + 2; //2 is used as a bias to prevent a zero timer
 
 	__HAL_TIM_SET_COMPARE(htim,channel, *V_current);	//write duty cycle to PWM
 }
@@ -1079,7 +1099,7 @@ void UGV_setDirection(GPIO_TypeDef *Port_A, uint16_t Pin_A, GPIO_TypeDef *Port_B
 
 }
 
-int ELRS_Encoder(float Input, float minInput, float maxInput){	//	Convert float values to ELRS range 172-1811
+int ELRS_Map(float Input, float minInput, float maxInput){	//	Convert float values to ELRS range 172-1811
 	return ((Input - minInput) * (1811 - 172) / (maxInput - minInput)) + 172;
 }
 
@@ -1088,7 +1108,7 @@ void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//	CRSF parser converts the
 
     // --- MAPPING ---
     // Directly assign if they are already in 172-1811 range
-    ch[0] = input->batteryPercentage;
+    ch[1] = input->batteryPercentage;
 
     // Fill unused channels with center value (992)
     for(int i = 1; i < 16; i++) ch[i] = 992;
@@ -1199,11 +1219,11 @@ void complementaryFilter(){//	Filter noise vibrations from the MPU readings
 	 * Overall upto this point the code takes about 250 - 300 cycles --> 1.5 - 1.8 us
 	 */
 
-	Filtered_Roll_Angle = (filter_Alpha *(Last_Filtered_Roll_Angle + (MPU_Data.gX * loopTime) ) ) + ( (filter_Beta) * Raw_Roll_Angle);
+	Filtered_Roll_Angle = (filter_Alpha *(Last_Filtered_Roll_Angle + (MPU_Data.gX * UAV_loopTime) ) ) + ( (filter_Beta) * Raw_Roll_Angle);
 
-	Filtered_Pitch_Angle = (filter_Alpha *(Last_Filtered_Pitch_Angle + (MPU_Data.gY * loopTime) ) ) + ( (filter_Beta) * Raw_Pitch_Angle);
+	Filtered_Pitch_Angle = (filter_Alpha *(Last_Filtered_Pitch_Angle + (MPU_Data.gY * UAV_loopTime) ) ) + ( (filter_Beta) * Raw_Pitch_Angle);
 
-	Filtered_Yaw_Angle = Last_Filtered_Yaw_Angle + (MPU_Data.gZ * loopTime);
+	Filtered_Yaw_Angle = Last_Filtered_Yaw_Angle + (MPU_Data.gZ * UAV_loopTime);
 
 	Last_Filtered_Roll_Angle  = Filtered_Roll_Angle;
 	Last_Filtered_Pitch_Angle = Filtered_Pitch_Angle;
@@ -1214,7 +1234,30 @@ void complementaryFilter(){//	Filter noise vibrations from the MPU readings
 	 */
 }
 
-void UAV_PID(){
+void UAV_error(){//	Computes the errors of the angles
+	/* This part is the Outer PID
+	 *
+	 * This takes about 20 cycles --> 120 ns
+	 */
+	float Rate_Roll_Target = K_outer * (UAV_Controls.Roll - Filtered_Roll_Angle);
+	float Rate_Pitch_Target = K_outer * (UAV_Controls.Pitch - Filtered_Pitch_Angle);
+	float Rate_Yaw_Target = UAV_Controls.Yaw;
+
+	RollError = Rate_Roll_Target - MPU_Data.gX;
+	PitchError = Rate_Pitch_Target - MPU_Data.gY;
+	YawError = Rate_Yaw_Target - MPU_Data.gZ;
+
+}
+
+void UAV_PID(float *Total, float error, float *last_I, float gyro, float last_gyro){ // format: Axis(Roll,Pitch,Yaw) , error , last integral , Current gyro axis reading , last gyro axis reading
+
+	float Proportional = Kp_inner * error;
+	float Integral = *last_I + (Ki_inner * error * UAV_loopTime);
+	float Derivative = -Kd_inner * ( (gyro - last_gyro) / UAV_loopTime);
+
+	*Total = Proportional + Integral + Derivative;
+
+	*last_I = Integral;
 
 }
 
@@ -1283,13 +1326,13 @@ void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){//	LSE Timer IS
  * It takes 7.452us * 4096 = 30.523ms for the buffer to be full
  */
 
-	/*
+
 	ADCsum = 0;	//resets the sum after evry call
 	for (uint16_t i = 0; i <= 4095; i ++){
 		ADCsum += ADC_buffer[i];
 	}
 	ADC_reading = ADCsum>>12;	// to make this faster use bitshift instead because 4096 is 2^n. this is same as ADCsum/4096
-	 */
+
 
 /*
  * loop checking	 = 5.95ns
