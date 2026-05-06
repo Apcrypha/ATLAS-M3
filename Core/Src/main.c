@@ -140,6 +140,10 @@ uint32_t error = 0;				//Each number corresponds to different errors
 #define Kp_inner		0.1f		// P gain for the Inner PID
 #define Ki_inner		0.1f		// I gain for the Inner PID
 #define Kd_inner		0.001f		// D gain for the Inner PID
+#define Lim				400.0f		// Summing limit of PID
+#define Mass_Base		0.5f		// The weight of the drone without any load in (Kg)
+#define Aero_coeff		0.1f
+
 
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
 
@@ -1236,6 +1240,8 @@ void complementaryFilter(){//	Filter noise vibrations from the MPU readings
 	/* From the 2nd Half it will take ~40 cycles	--> .24us
 	 *
 	 * The whole Function takes about 290 - 340 cycles --> 1.7 - 2us
+	 *
+	 * this is no longer accurate after removing the filtering of YAW
 	 */
 }
 
@@ -1260,12 +1266,13 @@ void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_g
 	float Integral = *last_I + (Ki_inner * error * UAV_loopTime);
 	float Derivative = -Kd_inner * ( (gyro - *last_gyro)* UAV_loopTime_INV);
 
-	*Total = Proportional + Integral + Derivative;
 
+
+	*Total = fmax(-Lim, fmin(Proportional + Integral + Derivative , Lim) );
 	*last_gyro = gyro;
 	*last_I = Integral;
 
-	// Takes about 35 - 50 cycles --> 208 - 298 ns
+	// Takes about 35 - 50 cycles --> 208 - 298 ns.  this is no longer accurate after adding the fmax(), fmin()
 
 }
 
