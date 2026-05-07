@@ -142,7 +142,6 @@ uint32_t error = 0;				//Each number corresponds to different errors
 #define Kd_inner		0.001f		// D gain for the Inner PID
 #define Lim				400.0f		// Summing limit of PID
 #define Mass_Base		0.5f		// The weight of the drone without any load in (Kg)
-#define Aero_coeff		0.1f
 
 
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
@@ -166,6 +165,8 @@ uint16_t UGV_leftVelocity = 0;
 //------------------------------------------------UAV-------------------------------------------------
 float filter_Alpha = 0.998;			// Alpha used for the complementary Filter
 float filter_Beta  = 0.02;			// 1 - filter_Alpha
+float Calibration_Alpha = 0.005;	// Used for calibrationg hover point with payload
+
 
 float Filtered_Roll_Angle;
 float Filtered_Pitch_Angle;
@@ -188,6 +189,9 @@ float Last_Yaw_I;		//Previously calculated Yaw of the PID
 float Total_Roll;		//The Roll value after the PID
 float Total_Pitch;		//The Pitch value after the PID
 float Total_Yaw;		//The Yaw value after the PID
+
+volatile uint8_t calibrationMode = 0;		//When this is 1, it tells the UAV to enter calibration mode
+float Calibrated_Hover;		//Calibrated hover value of the drone with payload this should be within dshot value range
 
 
 
@@ -224,7 +228,7 @@ const uint8_t crsf_crc8_table[256] = {//Look up table for the CRC
 
 /*---------------------------------------------------------------------Modular settings------------------------------------------------*/
 /*All these Variables are changed only depending on the modular configuration*/
-uint8_t MODE = 1;	//0=UGV ||	1=UAV
+uint8_t UV_MODE = 1;	//0=UGV ||	1=UAV
 /*
  * This is configured inside the MX_GPIO_Init();
  *
@@ -341,7 +345,7 @@ int main(void)
   //Start UART for ELRS		||	remove this when ELRS is not connected to avoid unintentional ISR firing
   //HAL_UART_Receive_IT(&huart4, &rx_byte, 1);
 
-  if (MODE){//Only enable this when mode is UAV
+  if (UV_MODE){//Only enable this when mode is UAV
 	  // when connecting to STM32 make sure to use the 3v3 source so it minimizes the noise
 	  //disable this when MPU is disconnected because Error_Handler() causes a loop.
 	  status = MPU6500_Init();	//Initialize MPU6500
@@ -365,7 +369,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-	  switch (MODE){
+	  switch (UV_MODE){
 		  case 0 :	//UGV Mode-------------------------------------------------------------------------------
 			  moveServo();
 
@@ -384,6 +388,12 @@ int main(void)
 				  UAV_PID(&Total_Pitch, PitchError, &Last_Pitch_I, MPU_Data.gY, &last_gY); 	//Pitch PID
 				  UAV_PID(&Total_Yaw, YawError, &Last_Yaw_I, MPU_Data.gZ, &last_gZ);		//Yaw	PID
 
+			  }
+
+			  while (calibrationMode){//	While calibration mode is turned on by the ELRS
+					Calibrated_Hover = Calibrated_Hover + Calibration_Alpha * (UAV_Controls.Thrust - Calibrated_Hover);
+
+					//dshot(Calibrated_Hover); // This should directly thrust all the motors at the calibrated value.
 			  }
 
 			  moveServo();
@@ -1281,6 +1291,7 @@ void UAV_Thrust(){
 
 }
 
+
 //---------------------------------------------------------------------------------------------- ISR Functions-------------------------------------------------------------------------------------------------------------------
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//	ISR when UART receives something
@@ -1322,7 +1333,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//	ISR when UART receiv
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){//	Gets called whenever there is an overflow on any timer
 	if (htim->Instance == TIM4){//	Checks if timer overflow is Timer 4
        //ISR every 5ms
-		if (MODE)return;	//	If not UGV return
+		if (UV_MODE)return;	//	If not UGV return
     	UGV_setDirection(GPIOC, GPIO_PIN_6, GPIOA, GPIO_PIN_7, &UGV_Controls.leftMotor_Dir);
     	UGV_setDirection(GPIOE, GPIO_PIN_11, GPIOE, GPIO_PIN_9, &UGV_Controls.rightMotor_Dir);
 
