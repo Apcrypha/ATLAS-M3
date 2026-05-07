@@ -205,6 +205,8 @@ float M2raw;
 float M3raw;
 float M4raw;
 
+float Rotmax = 1999;		//The max value the motors can have. This is derived from the DSHOT range which is 48-2047 --> 0 - 1999.
+
 
 //-----------------------------------------------ELRS & CRSF---------------------------------
 uint8_t ELRS_buffer[26];	//Received ELRS raw bits will be saved here
@@ -287,6 +289,9 @@ void readBattery();
 void complementaryFilter();
 void UAV_error();
 void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_gyro);
+void UAV_Thrust();
+
+
 
 /* USER CODE END PFP */
 
@@ -397,6 +402,7 @@ int main(void)
 				  UAV_PID(&Total_Roll, RollError, &Last_Roll_I, MPU_Data.gX, &last_gX);		//Roll 	PID
 				  UAV_PID(&Total_Pitch, PitchError, &Last_Pitch_I, MPU_Data.gY, &last_gY); 	//Pitch PID
 				  UAV_PID(&Total_Yaw, YawError, &Last_Yaw_I, MPU_Data.gZ, &last_gZ);		//Yaw	PID
+				  UAV_Thrust();																//Calculate raw thrust for each motor
 
 			  }
 
@@ -1303,9 +1309,29 @@ void UAV_Thrust(){
 	M2raw = Total_Thrust + Total_Roll - Total_Pitch - Total_Yaw;
 	M3raw = Total_Thrust + Total_Roll + Total_Pitch + Total_Yaw;
 	M4raw = Total_Thrust - Total_Roll + Total_Pitch - Total_Yaw;
-
 }
 
+void UAV_normalizeMotor(){
+
+	float M_max = fmax(fmax(M1raw, M2raw), fmax(M3raw, M4raw));
+	float M_min = fmin(fmin(M1raw, M2raw), fmin(M3raw, M4raw));
+
+	float Motor_Diff = M_max - M_min;
+	if(Motor_Diff > M_max ){
+		M1raw = Total_Thrust + (M1raw - Total_Thrust) * (Rotmax / Motor_Diff);
+		M2raw = Total_Thrust + (M2raw - Total_Thrust) * (Rotmax / Motor_Diff);
+		M3raw = Total_Thrust + (M3raw - Total_Thrust) * (Rotmax / Motor_Diff);
+		M4raw = Total_Thrust + (M4raw - Total_Thrust) * (Rotmax / Motor_Diff);
+	}
+
+	float overflowTop = fmax(0, M_max - Rotmax);
+	float overflowBot = fmax(0, 0 - M_min);
+
+	Motor1 = M1raw - overflowTop + overflowBot;
+	Motor2 = M2raw - overflowTop + overflowBot;
+	Motor3 = M3raw - overflowTop + overflowBot;
+	Motor4 = M4raw - overflowTop + overflowBot;
+}
 
 //---------------------------------------------------------------------------------------------- ISR Functions-------------------------------------------------------------------------------------------------------------------
 
