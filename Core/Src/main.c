@@ -142,6 +142,7 @@ uint32_t error = 0;				//Each number corresponds to different errors
 #define Kd_inner		0.001f		// D gain for the Inner PID
 #define Lim				400.0f		// Summing limit of PID
 #define Mass_Base		0.5f		// The weight of the drone without any load in (Kg)
+#define normal_Hover    1/500		//The hover value of the drone without any payload. Make sure it is inverse form so that the multiplication operation can be used
 
 
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
@@ -167,7 +168,6 @@ float filter_Alpha = 0.998;			// Alpha used for the complementary Filter
 float filter_Beta  = 0.02;			// 1 - filter_Alpha
 float Calibration_Alpha = 0.005;	// Used for calibrationg hover point with payload
 
-
 float Filtered_Roll_Angle;
 float Filtered_Pitch_Angle;
 
@@ -182,18 +182,28 @@ float last_gX;
 float last_gY;
 float last_gZ;
 
-float Last_Roll_I;		//Previously calculated Roll Integral of the PID
-float Last_Pitch_I;		//Previously calculated PitchIntegral of the PID
-float Last_Yaw_I;		//Previously calculated Yaw of the PID
+float Last_Roll_I;			//Previously calculated Roll Integral of the PID
+float Last_Pitch_I;			//Previously calculated PitchIntegral of the PID
+float Last_Yaw_I;			//Previously calculated Yaw of the PID
 
-float Total_Roll;		//The Roll value after the PID
-float Total_Pitch;		//The Pitch value after the PID
-float Total_Yaw;		//The Yaw value after the PID
+float Total_Roll;			//The Roll value after the PID
+float Total_Pitch;			//The Pitch value after the PID
+float Total_Yaw;			//The Yaw value after the PID
+float Total_Thrust;
 
 volatile uint8_t calibrationMode = 0;		//When this is 1, it tells the UAV to enter calibration mode
 float Calibrated_Hover;		//Calibrated hover value of the drone with payload this should be within dshot value range
+float massRatio;			//The ratio between the normal drone and with the payload
 
+float Motor1;				//Front Right	||	CCW
+float Motor2;				//Front Left	||	CW
+float Motor3;				//Rear 	Left	||	CCW
+float Motor4;				//Rear	Right	||	CW
 
+float M1raw;				//stores the raw unmapped  speed of motors
+float M2raw;
+float M3raw;
+float M4raw;
 
 
 //-----------------------------------------------ELRS & CRSF---------------------------------
@@ -393,6 +403,7 @@ int main(void)
 			  while (calibrationMode){//	While calibration mode is turned on by the ELRS
 					Calibrated_Hover = Calibrated_Hover + Calibration_Alpha * (UAV_Controls.Thrust - Calibrated_Hover);
 
+					massRatio = Calibrated_Hover * normal_Hover;
 					//dshot(Calibrated_Hover); // This should directly thrust all the motors at the calibrated value.
 			  }
 
@@ -1206,6 +1217,7 @@ uint8_t bitMask(uint16_t ch1){//	Decomposes the bits of channel 1 via bit maskin
 	UGV_Controls.leftMotor_Dir 	 = ch1 & 1;
 	UGV_Controls.rightMotor_Dir  = (ch1 >> 1) & 1;
 	cameraMove					 = (ch1 >> 2) & 1;
+	calibrationMode				 = (ch1 >> 3) & 1;
 
 	return	(ch1 >> 9) & 1;
 }
@@ -1272,11 +1284,9 @@ void UAV_error(){//	Computes the errors of the angles
 
 void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_gyro){ // format: Axis(Roll,Pitch,Yaw) , error , last integral , Current gyro axis reading , last gyro axis reading
 
-	float Proportional = Kp_inner * error;
-	float Integral = *last_I + (Ki_inner * error * UAV_loopTime);
-	float Derivative = -Kd_inner * ( (gyro - *last_gyro)* UAV_loopTime_INV);
-
-
+	float Proportional = Kp_inner * massRatio * error;
+	float Integral = *last_I + (Ki_inner * massRatio * error * UAV_loopTime);
+	float Derivative = -Kd_inner * massRatio * ( (gyro - *last_gyro)* UAV_loopTime_INV);
 
 	*Total = fmax(-Lim, fmin(Proportional + Integral + Derivative , Lim) );
 	*last_gyro = gyro;
@@ -1287,7 +1297,12 @@ void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_g
 }
 
 void UAV_Thrust(){
+	Total_Thrust = UAV_Controls.Thrust / (cos(Filtered_Pitch_Angle) * cos(Filtered_Roll_Angle));
 
+	M1raw = Total_Thrust - Total_Roll - Total_Pitch + Total_Yaw;
+	M2raw = Total_Thrust + Total_Roll - Total_Pitch - Total_Yaw;
+	M3raw = Total_Thrust + Total_Roll + Total_Pitch + Total_Yaw;
+	M4raw = Total_Thrust - Total_Roll + Total_Pitch - Total_Yaw;
 
 }
 
