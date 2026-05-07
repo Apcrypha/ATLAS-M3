@@ -269,6 +269,7 @@ static void MX_TIM1_Init(void);
 static void MX_RTC_Init(void);
 static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
+float map(float x, float in_min, float in_max, float out_min, float out_max);
 
 void readMPU();
 
@@ -1023,6 +1024,16 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+float map(float x, float in_min, float in_max, float out_min, float out_max) {
+    // Prevent Division by Zero: if the input range is nothing, return the lower output bound
+    if (in_max == in_min) {return out_min;}
+
+    // Standard linear interpolation formula:
+    // (x - in_min) / (in_max - in_min) calculates the "percentage" across the input scale
+    // Then we multiply that percentage by the output range and add the offset
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 void moveServo(){// move the servo using received angle
 
