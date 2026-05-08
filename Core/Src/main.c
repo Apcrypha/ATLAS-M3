@@ -64,15 +64,6 @@ typedef struct{	//Parameters to be sent by the ELRS
 
 }ELRS_data;
 
-typedef struct{ //UAV Controls
-
-	float Thrust;	//Must already be mapped from 0-1638
-	float Roll;		//Must already be mapped from -45deg to +45 deg. or whatever the max tilt of the drone is
-	float Pitch;	//Must already be mapped from -45deg to +45 deg. or whatever the max tilt of the drone is
-	float Yaw;		//Must already be mapped from -200deg/s to +200 deg/s. or whatever the max angular velocity of the drone is
-
-}UAV_controls;
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -105,7 +96,6 @@ UART_HandleTypeDef huart4;
 //Struct Initializations
 MPU_data MPU_Data;
 UGV_controls UGV_Controls;
-UAV_controls UAV_Controls;
 ELRS_data ELRS_Data;
 HAL_StatusTypeDef status;
 
@@ -167,6 +157,16 @@ uint16_t UGV_leftVelocity = 0;
 float filter_Alpha = 0.998;			// Alpha used for the complementary Filter
 float filter_Beta  = 0.02;			// 1 - filter_Alpha
 float Calibration_Alpha = 0.005;	// Used for calibrationg hover point with payload
+
+float rawThrust;	//Values stored directly from the ELRS
+float rawRoll;
+float rawPitch;
+float rawYaw;
+
+float Thrust;	//Must already be mapped from 0-1638
+float Roll;		//Must already be mapped from -45deg to +45 deg. or whatever the max tilt of the drone is
+float Pitch;	//Must already be mapped from -45deg to +45 deg. or whatever the max tilt of the drone is
+float Yaw;		//Must already be mapped from -200deg/s to +200 deg/s. or whatever the max angular velocity of the drone is
 
 float Filtered_Roll_Angle;
 float Filtered_Pitch_Angle;
@@ -408,7 +408,7 @@ int main(void)
 			  }
 
 			  while (calibrationMode){//	While calibration mode is turned on by the ELRS
-					Calibrated_Hover = Calibrated_Hover + Calibration_Alpha * (UAV_Controls.Thrust - Calibrated_Hover);
+					Calibrated_Hover = Calibrated_Hover + Calibration_Alpha * (Thrust - Calibrated_Hover);
 
 					massRatio = Calibrated_Hover * normal_Hover;
 					//dshot(Calibrated_Hover); // This should directly thrust all the motors at the calibrated value.
@@ -1289,9 +1289,9 @@ void UAV_error(){//	Computes the errors of the angles
 	 *
 	 * This takes about 50 cycles --> 297.5 ns
 	 */
-	float Rate_Roll_Target = K_outer * (UAV_Controls.Roll - Filtered_Roll_Angle);
-	float Rate_Pitch_Target = K_outer * (UAV_Controls.Pitch - Filtered_Pitch_Angle);
-	float Rate_Yaw_Target = UAV_Controls.Yaw;
+	float Rate_Roll_Target = K_outer * (Roll - Filtered_Roll_Angle);
+	float Rate_Pitch_Target = K_outer * (Pitch - Filtered_Pitch_Angle);
+	float Rate_Yaw_Target = Yaw;
 
 	RollError = Rate_Roll_Target - MPU_Data.gX;
 	PitchError = Rate_Pitch_Target - MPU_Data.gY;
@@ -1314,7 +1314,7 @@ void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_g
 }
 
 void UAV_Thrust(){
-	Total_Thrust = UAV_Controls.Thrust / (cos(Filtered_Pitch_Angle) * cos(Filtered_Roll_Angle));
+	Total_Thrust = Thrust / (cos(Filtered_Pitch_Angle) * cos(Filtered_Roll_Angle));
 
 	M1raw = Total_Thrust - Total_Roll - Total_Pitch + Total_Yaw;
 	M2raw = Total_Thrust + Total_Roll - Total_Pitch - Total_Yaw;
@@ -1344,6 +1344,27 @@ void UAV_normalizeMotor(){
 	Motor4 = M4raw - overflowTop + overflowBot;
 }
 
+void UAV_convertTilt(float rawAxis, float *Axis){//	Converts Roll and Pitch to degrees
+
+	float ELRSMax 				= 1811;
+	float ELRSMin 				= 172;
+	float ELRS_lowerDeadZone 	= 988;
+	float ELRS_higherDeadZone 	= 995;
+	float minimunTilt			= 5;	//degrees
+
+	//This is called ternary operation
+	int8_t direction = (rawAxis > ELRS_higherDeadZone) ? 1 : (rawAxis < ELRS_lowerDeadZone) ? -1 : 0;
+
+	if (direction == 1 ){//	Above the middle, so a positive angle
+		*rawAxis	= map(rawAxis, ELSRS_higherDeadZone, ELRSMax, 0, 45);
+	}
+
+	else if (direction == -1 ){//	below the middle, so a negative angle
+		*rawAxis	= map(rawAxis, ELRSMin, ELSRS_lowerDeadZone, 0, -45);
+	}
+
+}
+
 //---------------------------------------------------------------------------------------------- ISR Functions-------------------------------------------------------------------------------------------------------------------
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//	ISR when UART receives something
@@ -1366,6 +1387,10 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//	ISR when UART receiv
             	if (mode){//	UAV
                     cameraAngle_X = channels[1] - 172;	//deducts the 172 added by the controller
                     cameraAngle_Y = channels[2] - 172;
+                    rawRoll 		  = channels[3];
+                    rawPitch 		  = channels[4];
+                    rawYaw 			  = channels[5];
+                    rawThrust 		  = channels[6];
             	}
             	else{//	UGV
                     cameraAngle_X = channels[1] - 172;	//deducts the 172 added by the controller
