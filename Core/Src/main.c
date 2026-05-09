@@ -218,7 +218,8 @@ float M4raw;
 #define DSHOT_PERIOD 280			// for dshot600 280ticks per period
 #define DSHOT_1      210			// for dshot600 logic HIGH
 #define DSHOT_0      105			// for dshot600 logic LOW
-#define DSHOTcenter	 1000			// the center of dshot mapped to the center of the joystick
+#define DSHOTmax	 1999.0f			// max dshot value
+#define DSHOTcenter	 1000.0f			// the center of dshot mapped to the center of the joystick
 
 
 
@@ -1329,8 +1330,9 @@ void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_g
 }
 
 void UAV_Thrust(){
-	if(rawThrust ){
-
+	if(rawThrust > 992){//ELRS received joystick value above the middle
+		rawThrust = map(rawThrust, 993.0f, ELRSMax, 1001.0f, DSHOTmax);
+		Thrust = Calibrated_Hover + (DSHOTmax - Calibrated_Hover) * ( (rawThrust - 1000) / 999);
 	}
 }
 

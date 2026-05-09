@@ -29,25 +29,25 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   ALLOC
  12 .ARM.attributes 00000030  00000000  00000000  0000c06c  2**0
                   CONTENTS, READONLY
- 13 .debug_info   000152fb  00000000  00000000  0000c09c  2**0
+ 13 .debug_info   000152f9  00000000  00000000  0000c09c  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 14 .debug_abbrev 00002a31  00000000  00000000  00021397  2**0
+ 14 .debug_abbrev 00002a1a  00000000  00000000  00021395  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 15 .debug_aranges 000013f0  00000000  00000000  00023dc8  2**3
+ 15 .debug_aranges 000013f0  00000000  00000000  00023db0  2**3
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 16 .debug_rnglists 00000fcc  00000000  00000000  000251b8  2**0
+ 16 .debug_rnglists 00000fcd  00000000  00000000  000251a0  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 17 .debug_macro  00023e10  00000000  00000000  00026184  2**0
+ 17 .debug_macro  00023e17  00000000  00000000  0002616d  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 18 .debug_line   00017c72  00000000  00000000  00049f94  2**0
+ 18 .debug_line   00017c98  00000000  00000000  00049f84  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 19 .debug_str    000e1aee  00000000  00000000  00061c06  2**0
+ 19 .debug_str    000e1b02  00000000  00000000  00061c1c  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 20 .comment      00000043  00000000  00000000  001436f4  2**0
+ 20 .comment      00000043  00000000  00000000  0014371e  2**0
                   CONTENTS, READONLY
- 21 .debug_frame  00005928  00000000  00000000  00143738  2**2
+ 21 .debug_frame  00005928  00000000  00000000  00143764  2**2
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 22 .debug_line_str 0000006e  00000000  00000000  00149060  2**0
+ 22 .debug_line_str 0000006e  00000000  00000000  0014908c  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
 
 Disassembly of section .text:
@@ -4721,8 +4721,8 @@ void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_g
  800275c:	ba83126f 	.word	0xba83126f
 
 08002760 <UAV_normalizeMotor>:
-	if(rawThrust ){
-
+		rawThrust = map(rawThrust, 993.0f, ELRSMax, 1001.0f, DSHOTmax);
+		Thrust = Calibrated_Hover + (DSHOTmax - Calibrated_Hover) * ( (rawThrust - 1000) / 999);
 	}
 }
 
