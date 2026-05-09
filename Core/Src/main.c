@@ -94,13 +94,6 @@ UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
 
-//Permanent Values that can't and should'nt be changed
-
-#define DSHOT_PERIOD 280			// for dshot600 280ticks per period
-#define DSHOT_1      210			// for dshot600 logic HIGH
-#define DSHOT_0      105			// for dshot600 logic LOW
-
-
 //-----------------------------------------------------Battery Monitor----------------------------------------------------
 #define bufferSize 4096				// The amount of ADC reading to store
 
@@ -150,15 +143,6 @@ uint16_t UGV_leftVelocity = 0;
 
 
 
-
-
-
-
-
-
-
-
-
 //------------------------------------------------UAV-------------------------------------------------
 #define RAD_TO_DEG 			57.29577951f		// Equivalent to 180/pi
 #define UAV_loopTime		1.0f/184.0f			// loop time for the PID (s). Must be same with MPU INT.
@@ -169,12 +153,15 @@ uint16_t UGV_leftVelocity = 0;
 #define Kd_inner			0.001f				// D gain for the Inner PID
 #define Lim					400.0f				// Summing limit of PID
 #define Mass_Base			0.5f				// The weight of the drone without any load in (Kg)
-#define normal_Hover  		1.0f/500.0f			//The hover value of the drone without any payload. Make sure it is inverse form so that the multiplication operation can be used
-
-
-float filter_Alpha = 0.998;			// Alpha used for the complementary Filter
-float filter_Beta  = 0.02;			// 1 - filter_Alpha
-float Calibration_Alpha = 0.005;	// Used for calibrationg hover point with payload
+#define normal_Hover  		1.0f/500.0f			// The hover value of the drone without any payload. Make sure it is inverse form so that the multiplication operation can be used
+#define Rotmax 				1999.0f				// The max value the motors can have. This is derived from the DSHOT range which is 48-2047 --> 0 - 1999.
+#define minTilt				5.0f				// degree
+#define maxTilt				45.0f
+#define maxYaw				200.0f				// degrees/second
+#define minYaw				5.0f
+#define filter_Alpha 		0.998f				// Alpha used for the complementary Filter
+#define filter_Beta  		0.02f				// 1 - filter_Alpha
+#define Calibration_Alpha 	0.005f				// Used for calibrationg hover point with payload
 
 float rawThrust;	//Values stored directly from the ELRS
 float rawRoll;
@@ -223,14 +210,25 @@ float M2raw;
 float M3raw;
 float M4raw;
 
-float Rotmax = 1999;		//The max value the motors can have. This is derived from the DSHOT range which is 48-2047 --> 0 - 1999.
 
-float minTilt				= 5;	//degree
-float maxTilt				= 45;
+
+
+
+//-------------------------------------------------------DSHOT---------------------------------------------------------
+#define DSHOT_PERIOD 280			// for dshot600 280ticks per period
+#define DSHOT_1      210			// for dshot600 logic HIGH
+#define DSHOT_0      105			// for dshot600 logic LOW
+#define DSHOTcenter	 1000			// the center of dshot mapped to the center of the joystick
+
 
 
 
 //-----------------------------------------------ELRS & CRSF---------------------------------
+#define ELRSMax 				 1811
+#define ELRSMin 				 172
+#define ELRS_lowerDeadZone 		 990
+#define ELRS_higherDeadZone 	 993
+
 ELRS_data ELRS_Data;
 
 uint8_t ELRS_buffer[26];	//Received ELRS raw bits will be saved here
@@ -241,11 +239,6 @@ uint8_t rx_index = 0;         // Tracks where we are in the packet
 
 uint16_t channels[16];		//Temporary stores channel values here when receiving
 // Each payload channels can only have values ranging from 172 - 1811, which makes it a 1640 resolution
-
-float ELRSMax 				= 1811;
-float ELRSMin 				= 172;
-float ELRS_lowerDeadZone 	= 988;
-float ELRS_higherDeadZone 	= 995;
 
 
 const uint8_t crsf_crc8_table[256] = {//Look up table for the CRC
@@ -316,9 +309,11 @@ uint8_t crsf_crc8(uint8_t *ptr, uint8_t len);
 void readBattery();
 
 void UAV_convertTilt(float rawAxis, float *Axis);
+void UAV_convertYaw(float rawAxis, float *Axis);
 void complementaryFilter();
 void UAV_error();
 void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_gyro);
+void UAV_normalizeMotor();
 void UAV_Thrust();
 
 
@@ -429,12 +424,13 @@ int main(void)
 				  readMPU();
 				  UAV_convertTilt(rawRoll, &Roll);
 				  UAV_convertTilt(rawPitch, &Pitch);
+				  UAV_convertYaw(rawYaw, &Yaw);
 				  complementaryFilter();
 				  UAV_error();
 				  UAV_PID(&Total_Roll, RollError, &Last_Roll_I, MPU_Data.gX, &last_gX);		//Roll 	PID
 				  UAV_PID(&Total_Pitch, PitchError, &Last_Pitch_I, MPU_Data.gY, &last_gY); 	//Pitch PID
 				  UAV_PID(&Total_Yaw, YawError, &Last_Yaw_I, MPU_Data.gZ, &last_gZ);		//Yaw	PID
-				  UAV_Thrust();																//Calculate raw thrust for each motor
+				  UAV_normalizeMotor();																//Calculate raw thrust for each motor
 
 			  }
 
@@ -1333,15 +1329,19 @@ void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_g
 }
 
 void UAV_Thrust(){
+	if(rawThrust ){
+
+	}
+}
+
+void UAV_normalizeMotor(){
+
 	Total_Thrust = Thrust / (cos(Filtered_Pitch_Angle) * cos(Filtered_Roll_Angle));
 
 	M1raw = Total_Thrust - Total_Roll - Total_Pitch + Total_Yaw;
 	M2raw = Total_Thrust + Total_Roll - Total_Pitch - Total_Yaw;
 	M3raw = Total_Thrust + Total_Roll + Total_Pitch + Total_Yaw;
 	M4raw = Total_Thrust - Total_Roll + Total_Pitch - Total_Yaw;
-}
-
-void UAV_normalizeMotor(){
 
 	float M_max = fmax(fmax(M1raw, M2raw), fmax(M3raw, M4raw));
 	float M_min = fmin(fmin(M1raw, M2raw), fmin(M3raw, M4raw));
@@ -1382,17 +1382,17 @@ void UAV_convertTilt(float rawAxis, float *Axis){//	Converts Roll and Pitch to d
 
 }
 
-void UAV_convertYaw(float rawAxis, float *Axis){//	Converts Roll and Pitch to degrees
+void UAV_convertYaw(float rawAxis, float *Axis){//	Converts Yaw to degrees/second
 
 	//This is called ternary operation
 	int8_t direction = (rawAxis > ELRS_higherDeadZone) ? 1 : (rawAxis < ELRS_lowerDeadZone) ? -1 : 0;
 
 	if (direction == 1 ){//	Above the middle, so a positive angle
-		*Axis	= map(rawAxis, ELRS_higherDeadZone, ELRSMax, minTilt, maxTilt);
+		*Axis	= map(rawAxis, ELRS_higherDeadZone, ELRSMax, minYaw, maxYaw);
 	}
 
 	else if (direction == -1 ){//	below the middle, so a negative angle
-		*Axis	= -map(rawAxis, ELRSMin, ELRS_lowerDeadZone, maxTilt, minTilt);
+		*Axis	= -map(rawAxis, ELRSMin, ELRS_lowerDeadZone, maxYaw, minYaw);
 	}
 	else{
 		*Axis = 0;
