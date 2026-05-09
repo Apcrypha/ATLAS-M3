@@ -134,8 +134,22 @@ uint32_t error = 0;				//Each number corresponds to different errors
 #define Mass_Base		0.5f		// The weight of the drone without any load in (Kg)
 #define normal_Hover    1/500		//The hover value of the drone without any payload. Make sure it is inverse form so that the multiplication operation can be used
 
+//-----------------------------------------------------Battery Monitor----------------------------------------------------
+float maxVoltage = 3.029508;	//Max voltage of the Voltage divider
+float minVoltage = 2.163934;
 
+//This can change depending on the ADC reading of the Voltage Divider
+uint16_t maxADC = 4095;
+uint16_t minADC = 0;
+float readingVoltage;
+float batPercentage;
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
+
+//----------------------------------------------------IMU-----------------------------------------------------
+uint8_t int_status;
+int16_t accel_x, accel_y, accel_z;			//raw Place holders
+int16_t gyro_x, gyro_y, gyro_z;
+
 
 //----------------------------------------------------UGV------------------------------------------------
 uint16_t UGV_rightVelocity = 0;						//holder for current velocity is in pulse length for PWM
@@ -207,6 +221,8 @@ float M4raw;
 
 float Rotmax = 1999;		//The max value the motors can have. This is derived from the DSHOT range which is 48-2047 --> 0 - 1999.
 
+float minTilt				= 5;	//degree
+float maxTilt				= 45;
 
 //-----------------------------------------------ELRS & CRSF---------------------------------
 uint8_t ELRS_buffer[26];	//Received ELRS raw bits will be saved here
@@ -217,6 +233,12 @@ uint8_t rx_index = 0;         // Tracks where we are in the packet
 
 uint16_t channels[16];		//Temporary stores channel values here when receiving
 // Each payload channels can only have values ranging from 172 - 1811, which makes it a 1640 resolution
+
+float ELRSMax 				= 1811;
+float ELRSMin 				= 172;
+float ELRS_lowerDeadZone 	= 988;
+float ELRS_higherDeadZone 	= 995;
+
 
 const uint8_t crsf_crc8_table[256] = {//Look up table for the CRC
     0x00, 0xD5, 0x7F, 0xAA, 0xFE, 0x2B, 0x81, 0x54, 0x29, 0xFC, 0x56, 0x83, 0xD7, 0x02, 0xA8, 0x7D,
@@ -287,6 +309,7 @@ uint8_t crsf_crc8(uint8_t *ptr, uint8_t len);
 
 void readBattery();
 
+void UAV_convertTilt(float rawAxis, float *Axis);
 void complementaryFilter();
 void UAV_error();
 void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_gyro);
@@ -398,6 +421,8 @@ int main(void)
 		  case 1 :	//UAV Mode------------------------------------------------------------------------------
 			  if (MPUstatus){
 				  readMPU();
+				  UAV_convertTilt(rawRoll, &Roll);
+				  UAV_convertTilt(rawPitch, &Pitch);
 				  complementaryFilter();
 				  UAV_error();
 				  UAV_PID(&Total_Roll, RollError, &Last_Roll_I, MPU_Data.gX, &last_gX);		//Roll 	PID
@@ -1064,11 +1089,6 @@ void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){//	
 
 void readMPU(){	//	reads the MPU values using the library
 	MPUstatus = 0;
-
-	uint8_t int_status;
-	int16_t accel_x, accel_y, accel_z;
-	int16_t gyro_x, gyro_y, gyro_z;
-
 	//Acknowledge that the INP pin was received.
 	HAL_I2C_Mem_Read(&hi2c1, (0x68 << 1), 0x3A, I2C_MEMADD_SIZE_8BIT, &int_status, 1, 100);
 
@@ -1100,18 +1120,11 @@ void readMPU(){	//	reads the MPU values using the library
 }
 
 void readBattery(){//	Converts ADC to battery percentage
-	float maxVoltage = 3.029508;	//Max voltage of the Voltage divider
-	float minVoltage = 2.163934;
-
-	//This can change depending on the ADC reading of the Voltage Divider
-	uint16_t maxADC = 4095;
-	uint16_t minADC = 0;
-
 	//linear Interpolation to convert ADC to Voltage reading
-	float readingVoltage = ( ((float) (ADC_reading - minADC) * (maxVoltage - minVoltage) ) / (maxADC - minADC) ) + minVoltage;
+	readingVoltage = ( ((float) (ADC_reading - minADC) * (maxVoltage - minVoltage) ) / (maxADC - minADC) ) + minVoltage;
 
 	//Convert to battery percentage
-	float batPercentage = ( (readingVoltage - minVoltage) * 100 ) / (maxVoltage - minVoltage);
+	batPercentage = ( (readingVoltage - minVoltage) * 100 ) / (maxVoltage - minVoltage);
 
 	ELRS_Data.batteryPercentage = ELRS_Map(batPercentage,0,100);
 }
@@ -1346,12 +1359,6 @@ void UAV_normalizeMotor(){
 
 void UAV_convertTilt(float rawAxis, float *Axis){//	Converts Roll and Pitch to degrees
 
-	float ELRSMax 				= 1811;
-	float ELRSMin 				= 172;
-	float ELRS_lowerDeadZone 	= 988;
-	float ELRS_higherDeadZone 	= 995;
-	float minTilt				= 5;	//degree
-	float maxTilt				= 45;
 
 	//This is called ternary operation
 	int8_t direction = (rawAxis > ELRS_higherDeadZone) ? 1 : (rawAxis < ELRS_lowerDeadZone) ? -1 : 0;
@@ -1362,6 +1369,27 @@ void UAV_convertTilt(float rawAxis, float *Axis){//	Converts Roll and Pitch to d
 
 	else if (direction == -1 ){//	below the middle, so a negative angle
 		*Axis	= -map(rawAxis, ELRSMin, ELRS_lowerDeadZone, maxTilt, minTilt);
+	}
+	else{
+		*Axis = 0;
+	}
+
+}
+
+void UAV_convertYaw(float rawAxis, float *Axis){//	Converts Roll and Pitch to degrees
+
+	//This is called ternary operation
+	int8_t direction = (rawAxis > ELRS_higherDeadZone) ? 1 : (rawAxis < ELRS_lowerDeadZone) ? -1 : 0;
+
+	if (direction == 1 ){//	Above the middle, so a positive angle
+		*Axis	= map(rawAxis, ELRS_higherDeadZone, ELRSMax, minTilt, maxTilt);
+	}
+
+	else if (direction == -1 ){//	below the middle, so a negative angle
+		*Axis	= -map(rawAxis, ELRSMin, ELRS_lowerDeadZone, maxTilt, minTilt);
+	}
+	else{
+		*Axis = 0;
 	}
 
 }
