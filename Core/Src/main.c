@@ -315,7 +315,7 @@ void complementaryFilter();
 void UAV_error();
 void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_gyro);
 void UAV_normalizeMotor();
-void UAV_Thrust();
+void UAV_convertThrust();
 
 
 
@@ -426,6 +426,7 @@ int main(void)
 				  UAV_convertTilt(rawRoll, &Roll);
 				  UAV_convertTilt(rawPitch, &Pitch);
 				  UAV_convertYaw(rawYaw, &Yaw);
+				  UAV_convertThrust();
 				  complementaryFilter();
 				  UAV_error();
 				  UAV_PID(&Total_Roll, RollError, &Last_Roll_I, MPU_Data.gX, &last_gX);		//Roll 	PID
@@ -1329,10 +1330,14 @@ void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_g
 
 }
 
-void UAV_Thrust(){
-	if(rawThrust > 992){//ELRS received joystick value above the middle
-		rawThrust = map(rawThrust, 993.0f, ELRSMax, 1001.0f, DSHOTmax);
-		Thrust = Calibrated_Hover + (DSHOTmax - Calibrated_Hover) * ( (rawThrust - 1000) / 999);
+void UAV_convertThrust(){
+	if(rawThrust >= ELRS_higherDeadZone){//ELRS received joystick value above the middle
+		rawThrust = map(rawThrust, ELRS_higherDeadZone, ELRSMax, 1001, DSHOTmax);
+		Thrust = Calibrated_Hover + (DSHOTmax - Calibrated_Hover) * ( (rawThrust - DSHOTcenter) / 999.0f);
+	}
+	else{//ELRS received joystick value below the middle
+		rawThrust = map(rawThrust, ELRSMin, 991, 0, DSHOTcenter);
+		Thrust = Calibrated_Hover * (rawThrust / DSHOTcenter);
 	}
 }
 
