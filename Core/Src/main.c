@@ -1350,17 +1350,18 @@ void UAV_convertTilt(float rawAxis, float *Axis){//	Converts Roll and Pitch to d
 	float ELRSMin 				= 172;
 	float ELRS_lowerDeadZone 	= 988;
 	float ELRS_higherDeadZone 	= 995;
-	float minimunTilt			= 5;	//degrees
+	float minTilt				= 5;	//degree
+	float maxTilt				= 45;
 
 	//This is called ternary operation
 	int8_t direction = (rawAxis > ELRS_higherDeadZone) ? 1 : (rawAxis < ELRS_lowerDeadZone) ? -1 : 0;
 
 	if (direction == 1 ){//	Above the middle, so a positive angle
-		*rawAxis	= map(rawAxis, ELSRS_higherDeadZone, ELRSMax, 0, 45);
+		*Axis	= map(rawAxis, ELRS_higherDeadZone, ELRSMax, minTilt, maxTilt);
 	}
 
 	else if (direction == -1 ){//	below the middle, so a negative angle
-		*rawAxis	= map(rawAxis, ELRSMin, ELSRS_lowerDeadZone, 0, -45);
+		*Axis	= -map(rawAxis, ELRSMin, ELRS_lowerDeadZone, maxTilt, minTilt);
 	}
 
 }
