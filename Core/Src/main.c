@@ -93,65 +93,57 @@ TIM_HandleTypeDef htim5;
 UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
-//Struct Initializations
-MPU_data MPU_Data;
-UGV_controls UGV_Controls;
-ELRS_data ELRS_Data;
-HAL_StatusTypeDef status;
-
-volatile uint8_t MPUstatus = 0;			//read MPU value when 1
-volatile uint16_t ADC_reading = 0;		//stores the ADC reading for battery percentage
-volatile uint32_t ADCsum;				//stores the ISR ADC total
-
-uint8_t cameraAngle_X = 90;
-uint8_t cameraAngle_Y = 90;
-uint8_t cameraMove	= 0;		//Functions as a software interrupt. Only when this becomes 1 does the moveServo() run
-
-uint8_t errorMax = 10;
-uint32_t error = 0;				//Each number corresponds to different errors
-
 
 //Permanent Values that can't and should'nt be changed
-
-#define bufferSize 4096				// The amount of ADC reading to store
 
 #define DSHOT_PERIOD 280			// for dshot600 280ticks per period
 #define DSHOT_1      210			// for dshot600 logic HIGH
 #define DSHOT_0      105			// for dshot600 logic LOW
 
-#define maxUGV_Tick 1679			//set by the 20Khz counter
-#define UGV_loopTime	0.005f		// loop time for the P (s). Must be same with Timer.
-#define UGV_k 			30.0f		// P gain of the UGV
-
-#define RAD_TO_DEG 57.29577951f		// Equivalent to 180/pi
-#define UAV_loopTime	1/184		// loop time for the PID (s). Must be same with MPU INT.
-#define UAV_loopTime_INV 184.0f		// Inverse of the loop time. specifically use this to save time when we want to divide a variable with the loopTime and since division uses 12 cycles while multiplication only uses 1
-#define K_outer			1.0f		// Gain for the Outer PID
-#define Kp_inner		0.1f		// P gain for the Inner PID
-#define Ki_inner		0.1f		// I gain for the Inner PID
-#define Kd_inner		0.001f		// D gain for the Inner PID
-#define Lim				400.0f		// Summing limit of PID
-#define Mass_Base		0.5f		// The weight of the drone without any load in (Kg)
-#define normal_Hover    1/500		//The hover value of the drone without any payload. Make sure it is inverse form so that the multiplication operation can be used
 
 //-----------------------------------------------------Battery Monitor----------------------------------------------------
+#define bufferSize 4096				// The amount of ADC reading to store
+
 float maxVoltage = 3.029508;	//Max voltage of the Voltage divider
 float minVoltage = 2.163934;
+
+volatile uint16_t ADC_reading = 0;		//stores the ADC reading for battery percentage
+volatile uint32_t ADCsum;				//stores the ISR ADC total
 
 //This can change depending on the ADC reading of the Voltage Divider
 uint16_t maxADC = 4095;
 uint16_t minADC = 0;
-float readingVoltage;
-float batPercentage;
 uint16_t ADC_buffer[bufferSize];	//Array to temporarily store ADC readings
 
+
+
+
 //----------------------------------------------------IMU-----------------------------------------------------
+MPU_data MPU_Data;
+HAL_StatusTypeDef status;
+
+volatile uint8_t MPUstatus = 0;			//read MPU value when 1
+
 uint8_t int_status;
 int16_t accel_x, accel_y, accel_z;			//raw Place holders
 int16_t gyro_x, gyro_y, gyro_z;
 
 
+//---------------------------------------------------Camera------------------------------------------------------
+uint8_t cameraAngle_X = 90;
+uint8_t cameraAngle_Y = 90;
+uint8_t cameraMove	= 0;		//Functions as a software interrupt. Only when this becomes 1 does the moveServo() run
+
+
+
+
 //----------------------------------------------------UGV------------------------------------------------
+#define maxUGV_Tick		1679			//set by the 20Khz counter
+#define UGV_loopTime	0.005f			// loop time for the P (s). Must be same with Timer.
+#define UGV_k 			30.0f			// P gain of the UGV
+
+UGV_controls UGV_Controls;
+
 uint16_t UGV_rightVelocity = 0;						//holder for current velocity is in pulse length for PWM
 uint16_t UGV_leftVelocity = 0;
 
@@ -168,6 +160,18 @@ uint16_t UGV_leftVelocity = 0;
 
 
 //------------------------------------------------UAV-------------------------------------------------
+#define RAD_TO_DEG 			57.29577951f		// Equivalent to 180/pi
+#define UAV_loopTime		1.0f/184.0f			// loop time for the PID (s). Must be same with MPU INT.
+#define UAV_loopTime_INV 	184.0f				// Inverse of the loop time. specifically use this to save time when we want to divide a variable with the loopTime and since division uses 12 cycles while multiplication only uses 1
+#define K_outer				1.0f				// Gain for the Outer PID
+#define Kp_inner			0.1f				// P gain for the Inner PID
+#define Ki_inner			0.1f				// I gain for the Inner PID
+#define Kd_inner			0.001f				// D gain for the Inner PID
+#define Lim					400.0f				// Summing limit of PID
+#define Mass_Base			0.5f				// The weight of the drone without any load in (Kg)
+#define normal_Hover  		1.0f/500.0f			//The hover value of the drone without any payload. Make sure it is inverse form so that the multiplication operation can be used
+
+
 float filter_Alpha = 0.998;			// Alpha used for the complementary Filter
 float filter_Beta  = 0.02;			// 1 - filter_Alpha
 float Calibration_Alpha = 0.005;	// Used for calibrationg hover point with payload
@@ -224,7 +228,11 @@ float Rotmax = 1999;		//The max value the motors can have. This is derived from 
 float minTilt				= 5;	//degree
 float maxTilt				= 45;
 
+
+
 //-----------------------------------------------ELRS & CRSF---------------------------------
+ELRS_data ELRS_Data;
+
 uint8_t ELRS_buffer[26];	//Received ELRS raw bits will be saved here
 uint8_t ELRS_packet[26];	//Sent ELRS raw bits will be saved here
 
@@ -260,8 +268,8 @@ const uint8_t crsf_crc8_table[256] = {//Look up table for the CRC
 };
 
 
-/*---------------------------------------------------------------------Modular settings------------------------------------------------*/
-/*All these Variables are changed only depending on the modular configuration*/
+//---------------------------------------------------------------------Modular settings------------------------------------------------
+//All these Variables are changed only depending on the modular configuration
 uint8_t UV_MODE = 1;	//0=UGV ||	1=UAV
 /*
  * This is configured inside the MX_GPIO_Init();
@@ -269,10 +277,8 @@ uint8_t UV_MODE = 1;	//0=UGV ||	1=UAV
  * for testing make sure to disable the algorithm inside MX_GPIO_Init(), so it doesnt pull the mode to 0 without a switch
  */
 
-//For the controller
-
-
-//For UGV
+uint8_t errorMax = 10;
+uint32_t error = 0;				//Each number corresponds to different errors
 
 
 
@@ -1121,10 +1127,10 @@ void readMPU(){	//	reads the MPU values using the library
 
 void readBattery(){//	Converts ADC to battery percentage
 	//linear Interpolation to convert ADC to Voltage reading
-	readingVoltage = ( ((float) (ADC_reading - minADC) * (maxVoltage - minVoltage) ) / (maxADC - minADC) ) + minVoltage;
+	float readingVoltage = ( ((float) (ADC_reading - minADC) * (maxVoltage - minVoltage) ) / (maxADC - minADC) ) + minVoltage;
 
 	//Convert to battery percentage
-	batPercentage = ( (readingVoltage - minVoltage) * 100 ) / (maxVoltage - minVoltage);
+	float batPercentage = ( (readingVoltage - minVoltage) * 100 ) / (maxVoltage - minVoltage);
 
 	ELRS_Data.batteryPercentage = ELRS_Map(batPercentage,0,100);
 }
