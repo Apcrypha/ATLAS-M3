@@ -196,6 +196,8 @@ float Total_Pitch;			//The Pitch value after the PID
 float Total_Yaw;			//The Yaw value after the PID
 float Total_Thrust;
 
+volatile uint8_t UAVloop 		 = 0;		//When PID loop is ongoing prevents the ELRS from getting a new data.
+
 volatile uint8_t calibrationMode = 0;		//When this is 1, it tells the UAV to enter calibration mode
 float Calibrated_Hover;		//Calibrated hover value of the drone with payload this should be within dshot value range
 float massRatio;			//The ratio between the normal drone and with the payload
@@ -422,26 +424,47 @@ int main(void)
 
 		  case 1 :	//UAV Mode------------------------------------------------------------------------------
 			  if (MPUstatus){
+				  UAVloop = 1;		//Makes sure the ELRS doesnt get new data
 				  readMPU();
+
 				  UAV_convertTilt(rawRoll, &Roll);
 				  UAV_convertTilt(rawPitch, &Pitch);
 				  UAV_convertYaw(rawYaw, &Yaw);
 				  UAV_convertThrust();
+
 				  complementaryFilter();
+
 				  UAV_error();
 				  UAV_PID(&Total_Roll, RollError, &Last_Roll_I, MPU_Data.gX, &last_gX);		//Roll 	PID
 				  UAV_PID(&Total_Pitch, PitchError, &Last_Pitch_I, MPU_Data.gY, &last_gY); 	//Pitch PID
 				  UAV_PID(&Total_Yaw, YawError, &Last_Yaw_I, MPU_Data.gZ, &last_gZ);		//Yaw	PID
-				  UAV_normalizeMotor();																//Calculate raw thrust for each motor
+				  UAV_normalizeMotor();														//Calculate raw thrust for each motor
 
+				  UAVloop = 0;		//Allows the ELRS to get new data
 			  }
 
 			  while (calibrationMode){//	While calibration mode is turned on by the ELRS
-					Calibrated_Hover = Calibrated_Hover + Calibration_Alpha * (Thrust - Calibrated_Hover);
 
-					massRatio = Calibrated_Hover * normal_Hover;
+				  if (rawThrust >= ELRS_higherDeadZone){
+					  Thrust = map(rawThrust, ELRS_higherDeadZone, ELRSMax, 1001, DSHOTmax);
+				  }
+
+				  else if (rawThrust <= ELRS_lowerDeadZone){
+					  Thrust = map(rawThrust, ELRSMin, ELRS_lowerDeadZone, 0, DSHOTcenter - 1);
+				  }
+
+				  else{
+					  Thrust = DSHOTcenter;
+				  }
+
+				  Calibrated_Hover = Calibrated_Hover + Calibration_Alpha * (Thrust - Calibrated_Hover);
+
+
+
+				  massRatio = Calibrated_Hover * normal_Hover;	//Remove this for initial calibration of unloaded drone
 					//dshot(Calibrated_Hover); // This should directly thrust all the motors at the calibrated value.
 			  }
+
 
 			  moveServo();
 
@@ -1093,6 +1116,10 @@ void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){//	
 
 void readMPU(){	//	reads the MPU values using the library
 	MPUstatus = 0;
+	if(calibrationMode){// Skip the MPU when in calibration Mode
+		return;
+	}
+
 	//Acknowledge that the INP pin was received.
 	HAL_I2C_Mem_Read(&hi2c1, (0x68 << 1), 0x3A, I2C_MEMADD_SIZE_8BIT, &int_status, 1, 100);
 
@@ -1411,7 +1438,12 @@ void UAV_convertYaw(float rawAxis, float *Axis){//	Converts Yaw to degrees/secon
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {//	ISR when UART receives something
     if (huart->Instance == UART4) {//	Checks if UART4
-        ELRS_buffer[rx_index++] = rx_byte;
+
+    	if(UAVloop){//Prevents the ELRS from changing the data when PID loop is ongoing
+    		return;
+    	}
+
+    	ELRS_buffer[rx_index++] = rx_byte;
 
         // 1. Check for Sync Byte (Address)
         if (ELRS_buffer[0] != 0xC8 && ELRS_buffer[0] != 0xEE) {
