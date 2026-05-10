@@ -220,12 +220,14 @@ float M4raw;
 
 
 //-------------------------------------------------------DSHOT---------------------------------------------------------
-#define DSHOT_PERIOD 280			// for dshot600 280ticks per period
-#define DSHOT_1      210			// for dshot600 logic HIGH
-#define DSHOT_0      105			// for dshot600 logic LOW
+#define DSHOT_PERIOD 280				// for dshot600 280ticks per period for 168MHz
+#define DSHOT_1      210				// for dshot600 logic HIGH
+#define DSHOT_0      105				// for dshot600 logic LOW
 #define DSHOTmax	 1999.0f			// max dshot value
 #define DSHOTcenter	 1000.0f			// the center of dshot mapped to the center of the joystick
+#define DSHOT_BUFFER_SIZE 18 			// 16 bits + 2 zeros for the reset gap
 
+uint32_t dma_buffer[DSHOT_BUFFER_SIZE];
 
 
 
@@ -276,6 +278,8 @@ uint8_t UV_MODE = 1;	//0=UGV ||	1=UAV
  * for testing make sure to disable the algorithm inside MX_GPIO_Init(), so it doesnt pull the mode to 0 without a switch
  */
 
+uint8_t stopMotor = 0; 			//when this is 1 it sends 0 to ESC via DSHOT so the BLDC doesnt spin.
+
 uint8_t errorMax = 10;
 uint32_t error = 0;				//Each number corresponds to different errors
 
@@ -308,7 +312,6 @@ void UGV_setDirection(GPIO_TypeDef* Port_A, uint16_t Pin_A, GPIO_TypeDef* Port_B
 void CRSF_Parser(uint8_t* packet, ELRS_data* input);
 void extractELRS(uint8_t* buf, uint16_t* ch);
 uint8_t bitMask(uint16_t ch1);
-int ELRS_Map(float Input, float minInput, float maxInput);
 uint8_t crsf_crc8(uint8_t *ptr, uint8_t len);
 
 void readBattery();
@@ -1127,7 +1130,7 @@ void readBattery(){//	Converts ADC to battery percentage
 	//Convert to battery percentage
 	float batPercentage = ( (readingVoltage - minVoltage) * 100 ) / (maxVoltage - minVoltage);
 
-	ELRS_Data.batteryPercentage = ELRS_Map(batPercentage,0,100);
+	ELRS_Data.batteryPercentage = (int)map(batPercentage, 0, 100, ELRSMin, ELRSMax) ;
 }
 
 void UGV_setSpeed(TIM_HandleTypeDef *htim, uint32_t channel, int16_t *V_target, uint16_t *V_current){// Sets the UGV speed with P controller
@@ -1163,9 +1166,6 @@ void UGV_setDirection(GPIO_TypeDef *Port_A, uint16_t Pin_A, GPIO_TypeDef *Port_B
 
 }
 
-int ELRS_Map(float Input, float minInput, float maxInput){	//	Convert float values to ELRS range 172-1811
-	return ((Input - minInput) * (1811 - 172) / (maxInput - minInput)) + 172;
-}
 
 void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//	CRSF parser converts the bytes to individual bits
     uint16_t ch[16];
@@ -1253,22 +1253,44 @@ uint8_t bitMask(uint16_t ch1){//	Decomposes the bits of channel 1 via bit maskin
 	return	(ch1 >> 9) & 1;
 }
 
-uint16_t dshot_prepare_packet(uint16_t value){//	For dshot
+void DSHOT_PreparePacket(uint16_t throttle, uint8_t stop_button, uint8_t request_telemetry) {//		Receives dshot values
+    uint16_t dshot_value;
     uint16_t packet;
-    uint8_t csum = 0;
-    uint16_t csum_data;
 
-    value <<= 1; // telemetry = 0
-
-    csum_data = value;
-    for (int i = 0; i < 3; i++) {
-        csum ^= csum_data;
-        csum_data >>= 4;
+    // 1. Handle Stop Button vs Active Range
+    if (stop_button) {
+        dshot_value = 0; // Absolute stop/disarm
     }
-    csum &= 0xF;
+    else {
+        // Clamp input to 0-1999 to prevent overflow
+        if (throttle > 1999) throttle = 1999;
+        dshot_value = throttle + 48;
+    }
 
-    packet = (value << 4) | csum;
-    return packet;
+    // 2. Assemble 12-bit packet (11 bits throttle + 1 bit telemetry)
+    packet = (dshot_value << 1) | (request_telemetry ? 1 : 0);     // Shift left 1, then OR with the telemetry bit (1 if requested, 0 if not)
+
+    // 3. Calculate 4-bit CRC
+    // XOR the three 4-bit nibbles of the 12-bit packet
+    uint16_t crc = (packet ^ (packet >> 4) ^ (packet >> 8)) & 0x0F;
+
+    // 4. Final 16-bit frame (Shift packet left by 4, then add CRC)
+    packet = (packet << 4) | crc;
+
+    // 5. Slice the 16-bit packet into 16 physical PWM duty cycle values
+    for (int i = 0; i < 16; i++) {
+    	// Test the bit at the current position (starting from MSB)
+    	if (packet & (0x8000 >> i)) {
+    		dma_buffer[i] = DSHOT_1; // Send a 1
+    	}
+    	else {
+    		dma_buffer[i] = DSHOT_0; // Send a 0
+            }
+    }
+
+    // 6. Append the reset pulses to pull the PWM line LOW at the end
+    dma_buffer[16] = 0;
+    dma_buffer[17] = 0;
 }
 
 void complementaryFilter(){//	Filter noise vibrations from the MPU readings
