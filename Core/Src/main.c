@@ -227,7 +227,11 @@ float M4raw;
 #define DSHOTcenter	 1000.0f			// the center of dshot mapped to the center of the joystick
 #define DSHOT_BUFFER_SIZE 18 			// 16 bits + 2 zeros for the reset gap
 
-uint32_t dma_buffer[DSHOT_BUFFER_SIZE];
+uint16_t dshot_value;
+uint16_t DSHOT_packet;
+
+uint32_t dma_buffer[4][DSHOT_BUFFER_SIZE]; // [4 motors] [18 values each]
+uint32_t timer_channels[4] = {TIM_CHANNEL_1, TIM_CHANNEL_2, TIM_CHANNEL_3, TIM_CHANNEL_4}; // Array to map our loop index (0-3) to the specific Timer Channels
 
 
 
@@ -378,16 +382,14 @@ int main(void)
 
   HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 10240, RTC_WAKEUPCLOCK_RTCCLK_DIV16);	//Start the LSE Timer
 
-  //Start timer 4
-  HAL_TIM_Base_Start_IT(&htim4);
 
   //Starts timer for motor driver
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
 
   //Starts timer for servo
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
 
   //Start UART for ELRS		||	remove this when ELRS is not connected to avoid unintentional ISR firing
   //HAL_UART_Receive_IT(&huart4, &rx_byte, 1);
@@ -1253,10 +1255,7 @@ uint8_t bitMask(uint16_t ch1){//	Decomposes the bits of channel 1 via bit maskin
 	return	(ch1 >> 9) & 1;
 }
 
-void DSHOT_PreparePacket(uint16_t throttle, uint8_t stop_button, uint8_t request_telemetry) {//		Receives dshot values
-    uint16_t dshot_value;
-    uint16_t packet;
-
+void DSHOT_PreparePacket(uint16_t throttle, uint8_t motorNumber, uint8_t stop_button, uint8_t request_telemetry) {//		Receives dshot values
     // 1. Handle Stop Button vs Active Range
     if (stop_button) {
         dshot_value = 0; // Absolute stop/disarm
@@ -1268,29 +1267,38 @@ void DSHOT_PreparePacket(uint16_t throttle, uint8_t stop_button, uint8_t request
     }
 
     // 2. Assemble 12-bit packet (11 bits throttle + 1 bit telemetry)
-    packet = (dshot_value << 1) | (request_telemetry ? 1 : 0);     // Shift left 1, then OR with the telemetry bit (1 if requested, 0 if not)
+    DSHOT_packet = (dshot_value << 1) | (request_telemetry ? 1 : 0);     // Shift left 1, then OR with the telemetry bit (1 if requested, 0 if not)
 
     // 3. Calculate 4-bit CRC
     // XOR the three 4-bit nibbles of the 12-bit packet
-    uint16_t crc = (packet ^ (packet >> 4) ^ (packet >> 8)) & 0x0F;
+    uint16_t crc = (DSHOT_packet ^ (DSHOT_packet >> 4) ^ (DSHOT_packet >> 8)) & 0x0F;
 
     // 4. Final 16-bit frame (Shift packet left by 4, then add CRC)
-    packet = (packet << 4) | crc;
+    DSHOT_packet = (DSHOT_packet << 4) | crc;
 
     // 5. Slice the 16-bit packet into 16 physical PWM duty cycle values
     for (int i = 0; i < 16; i++) {
     	// Test the bit at the current position (starting from MSB)
-    	if (packet & (0x8000 >> i)) {
-    		dma_buffer[i] = DSHOT_1; // Send a 1
+    	if (DSHOT_packet & (0x8000 >> i)) {
+    		dma_buffer[motorNumber][i] = DSHOT_1; // Send a 1
     	}
     	else {
-    		dma_buffer[i] = DSHOT_0; // Send a 0
+    		dma_buffer[motorNumber][i] = DSHOT_0; // Send a 0
             }
     }
 
     // 6. Append the reset pulses to pull the PWM line LOW at the end
-    dma_buffer[16] = 0;
-    dma_buffer[17] = 0;
+    dma_buffer[motorNumber][16] = 0;
+    dma_buffer[motorNumber][17] = 0;
+}
+
+void DSHOT_Fire() {//	Turns the DSHOT values to PWM
+    // Cycle through all 4 motors and trigger their DMA streams
+    for (int i = 0; i < 4; i++) {
+        // HAL_TIM_PWM_Start_DMA automatically enables the timer counter,
+        // the PWM output on the pin, and the DMA request.
+        HAL_TIM_PWM_Start_DMA(&htim3, timer_channels[i], (uint32_t *)dma_buffer[i], 18);
+    }
 }
 
 void complementaryFilter(){//	Filter noise vibrations from the MPU readings
