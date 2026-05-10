@@ -59,22 +59,14 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define DSHOT4_Pin GPIO_PIN_0
-#define DSHOT4_GPIO_Port GPIOA
-#define DSHOT3_Pin GPIO_PIN_1
-#define DSHOT3_GPIO_Port GPIOA
-#define DSHOT2_Pin GPIO_PIN_2
-#define DSHOT2_GPIO_Port GPIOA
-#define DSHOT1_Pin GPIO_PIN_3
-#define DSHOT1_GPIO_Port GPIOA
 #define ADC_BAT_Pin GPIO_PIN_6
 #define ADC_BAT_GPIO_Port GPIOA
 #define INA1_Pin GPIO_PIN_7
 #define INA1_GPIO_Port GPIOA
-#define SRV1_Pin GPIO_PIN_0
-#define SRV1_GPIO_Port GPIOB
-#define SRV2_Pin GPIO_PIN_1
-#define SRV2_GPIO_Port GPIOB
+#define DSHOT3_Pin GPIO_PIN_0
+#define DSHOT3_GPIO_Port GPIOB
+#define DSHOT4_Pin GPIO_PIN_1
+#define DSHOT4_GPIO_Port GPIOB
 #define IMU_INT_Pin GPIO_PIN_8
 #define IMU_INT_GPIO_Port GPIOE
 #define IMU_INT_EXTI_IRQn EXTI9_5_IRQn
@@ -86,8 +78,14 @@ void Error_Handler(void);
 #define PWM_A_GPIO_Port GPIOE
 #define PWM_B_Pin GPIO_PIN_14
 #define PWM_B_GPIO_Port GPIOE
+#define SRV1_Pin GPIO_PIN_12
+#define SRV1_GPIO_Port GPIOD
+#define SRV2_Pin GPIO_PIN_13
+#define SRV2_GPIO_Port GPIOD
 #define INA2_Pin GPIO_PIN_6
 #define INA2_GPIO_Port GPIOC
+#define DSHOT2_Pin GPIO_PIN_7
+#define DSHOT2_GPIO_Port GPIOC
 #define Debug_LED_Pin GPIO_PIN_8
 #define Debug_LED_GPIO_Port GPIOA
 #define Mode_Switch_Pin GPIO_PIN_9
@@ -96,6 +94,8 @@ void Error_Handler(void);
 #define ELRS_TX_GPIO_Port GPIOC
 #define ELRS_RX_Pin GPIO_PIN_11
 #define ELRS_RX_GPIO_Port GPIOC
+#define DSHOT1_Pin GPIO_PIN_4
+#define DSHOT1_GPIO_Port GPIOB
 #define IMU_SCL_Pin GPIO_PIN_6
 #define IMU_SCL_GPIO_Port GPIOB
 #define IMU_SDA_Pin GPIO_PIN_7
