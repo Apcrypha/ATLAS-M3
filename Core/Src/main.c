@@ -304,6 +304,7 @@ static void MX_RTC_Init(void);
 static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 float map(float x, float in_min, float in_max, float out_min, float out_max);
+void readBattery();
 
 void readMPU();
 
@@ -318,8 +319,6 @@ void extractELRS(uint8_t* buf, uint16_t* ch);
 uint8_t bitMask(uint16_t ch1);
 uint8_t crsf_crc8(uint8_t *ptr, uint8_t len);
 
-void readBattery();
-
 void UAV_convertTilt(float rawAxis, float *Axis);
 void UAV_convertYaw(float rawAxis, float *Axis);
 void complementaryFilter();
@@ -328,6 +327,8 @@ void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_g
 void UAV_normalizeMotor();
 void UAV_convertThrust();
 
+void DSHOT_Fire();
+void DSHOT_PreparePacket(uint16_t throttle, uint8_t motorNumber, uint8_t stop_button, uint8_t request_telemetry);
 
 
 /* USER CODE END PFP */
@@ -445,6 +446,14 @@ int main(void)
 				  UAV_PID(&Total_Pitch, PitchError, &Last_Pitch_I, MPU_Data.gY, &last_gY); 	//Pitch PID
 				  UAV_PID(&Total_Yaw, YawError, &Last_Yaw_I, MPU_Data.gZ, &last_gZ);		//Yaw	PID
 				  UAV_normalizeMotor();														//Calculate raw thrust for each motor
+
+				  //Convert motor values to DSHOT
+				  DSHOT_PreparePacket(Motor1, 0, 0, 0);
+				  DSHOT_PreparePacket(Motor2, 1, 0, 0);
+				  DSHOT_PreparePacket(Motor3, 2, 0, 0);
+				  DSHOT_PreparePacket(Motor4, 3, 0, 0);
+
+				  DSHOT_Fire();		//Fire the DSHOT to the ESC
 
 				  UAVloop = 0;		//Allows the ELRS to get new data
 			  }
@@ -1168,7 +1177,6 @@ void UGV_setDirection(GPIO_TypeDef *Port_A, uint16_t Pin_A, GPIO_TypeDef *Port_B
 
 }
 
-
 void CRSF_Parser(uint8_t* packet, ELRS_data* input) {//	CRSF parser converts the bytes to individual bits
     uint16_t ch[16];
 
@@ -1534,6 +1542,30 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){//	EXTI ISR
 		//error+=1;
 		MPUstatus = 1;	//Set to a volatile variable instead of reading MPU directly to prevent a blocking
 	}
+}
+
+void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) {// This function is automatically triggered by the hardware DMA Interrupt
+
+	//For DSHOT
+    if (htim->Instance == TIM3) {// 1. Verify that the interrupt came from Timer 3
+
+        // 2. Check WHICH channel just finished, and stop ONLY its DMA stream.
+        // We use HAL_TIM_ACTIVE_CHANNEL_x here because the HAL uses a different
+        // naming convention inside the interrupt status register.
+
+        if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) {
+            HAL_TIM_PWM_Stop_DMA(htim, TIM_CHANNEL_1);
+        }
+        else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2) {
+            HAL_TIM_PWM_Stop_DMA(htim, TIM_CHANNEL_2);
+        }
+        else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3) {
+            HAL_TIM_PWM_Stop_DMA(htim, TIM_CHANNEL_3);
+        }
+        else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_4) {
+            HAL_TIM_PWM_Stop_DMA(htim, TIM_CHANNEL_4);
+        }
+    }
 }
 
 
