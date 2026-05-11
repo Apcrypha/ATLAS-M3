@@ -220,7 +220,6 @@ float M4raw;
 
 
 //-------------------------------------------------------DSHOT---------------------------------------------------------
-#define DSHOT_PERIOD 280				// for dshot600 280ticks per period for 168MHz
 #define DSHOT_1      210				// for dshot600 logic HIGH
 #define DSHOT_0      105				// for dshot600 logic LOW
 #define DSHOTmax	 1999.0f			// max dshot value
@@ -474,10 +473,16 @@ int main(void)
 
 				  Calibrated_Hover = Calibrated_Hover + Calibration_Alpha * (Thrust - Calibrated_Hover);
 
+				  //Convert motor values to DSHOT
+				  DSHOT_PreparePacket(Calibrated_Hover, 0, 0, 0);
+				  DSHOT_PreparePacket(Calibrated_Hover, 1, 0, 0);
+				  DSHOT_PreparePacket(Calibrated_Hover, 2, 0, 0);
+				  DSHOT_PreparePacket(Calibrated_Hover, 3, 0, 0);
+
+				  DSHOT_Fire();		//Fire the DSHOT to the ESC
 
 
 				  massRatio = Calibrated_Hover * normal_Hover;	//Remove this for initial calibration of unloaded drone
-					//dshot(Calibrated_Hover); // This should directly thrust all the motors at the calibrated value.
 			  }
 
 
