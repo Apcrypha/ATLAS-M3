@@ -1467,6 +1467,7 @@ int main(void)
  8001070:	4b60      	ldr	r3, [pc, #384]	@ (80011f4 <main+0x364>)
  8001072:	2200      	movs	r2, #0
  8001074:	701a      	strb	r2, [r3, #0]
+				  //until here taked ~370 to 470 microseconds
 			  }
 
 			  while (calibrationMode){//	While calibration mode is turned on by the ELRS
@@ -3313,6 +3314,8 @@ void readMPU(){	//	reads the MPU values using the library
  8001c74:	b580      	push	{r7, lr}
  8001c76:	b084      	sub	sp, #16
  8001c78:	af04      	add	r7, sp, #16
+	//This whole function takes ~350 - 450us
+
 	MPUstatus = 0;
  8001c7a:	4b47      	ldr	r3, [pc, #284]	@ (8001d98 <readMPU+0x124>)
  8001c7c:	2200      	movs	r2, #0
@@ -3327,7 +3330,7 @@ void readMPU(){	//	reads the MPU values using the library
 	}
 
 	//Acknowledge that the INP pin was received.
-	HAL_I2C_Mem_Read(&hi2c1, (0x68 << 1), 0x3A, I2C_MEMADD_SIZE_8BIT, &int_status, 1, 100);
+	HAL_I2C_Mem_Read(&hi2c1, (0x68 << 1), 0x3A, I2C_MEMADD_SIZE_8BIT, &int_status, 1, 100);	//This  is where 97% of the fuction is stalling
  8001c8c:	2364      	movs	r3, #100	@ 0x64
  8001c8e:	9302      	str	r3, [sp, #8]
  8001c90:	2301      	movs	r3, #1
@@ -4554,7 +4557,9 @@ void DSHOT_PreparePacket(uint16_t throttle, uint8_t motorNumber, uint8_t stop_bu
  80025e4:	713b      	strb	r3, [r7, #4]
  80025e6:	4613      	mov	r3, r2
  80025e8:	70fb      	strb	r3, [r7, #3]
-    // 1. Handle Stop Button vs Active Range
+	//This whole function takes ~4.5us
+
+	// 1. Handle Stop Button vs Active Range
     if (stop_button) {
  80025ea:	793b      	ldrb	r3, [r7, #4]
  80025ec:	2b00      	cmp	r3, #0
@@ -4725,7 +4730,8 @@ void DSHOT_Fire() {//	Turns the DSHOT values to PWM
  8002700:	b580      	push	{r7, lr}
  8002702:	b082      	sub	sp, #8
  8002704:	af00      	add	r7, sp, #0
-    // Cycle through all 4 motors and trigger their DMA streams
+	//This whole function takes ~6 - 8us
+	// Cycle through all 4 motors and trigger their DMA streams
     for (int i = 0; i < 4; i++) {
  8002706:	2300      	movs	r3, #0
  8002708:	607b      	str	r3, [r7, #4]
@@ -4770,6 +4776,7 @@ void complementaryFilter(){//	Filter noise vibrations from the MPU readings
  800274c:	b580      	push	{r7, lr}
  800274e:	b084      	sub	sp, #16
  8002750:	af00      	add	r7, sp, #0
+	//This whole function takes ~1.7 - 2us
 
 	float Raw_Roll_Angle = atan2f(MPU_Data.aY, MPU_Data.aZ) * RAD_TO_DEG;
  8002752:	4b40      	ldr	r3, [pc, #256]	@ (8002854 <complementaryFilter+0x108>)
@@ -4860,11 +4867,8 @@ void complementaryFilter(){//	Filter noise vibrations from the MPU readings
  8002846:	681b      	ldr	r3, [r3, #0]
  8002848:	4a09      	ldr	r2, [pc, #36]	@ (8002870 <complementaryFilter+0x124>)
  800284a:	6013      	str	r3, [r2, #0]
-	 *
-	 * The whole Function takes about 290 - 340 cycles --> 1.7 - 2us
-	 *
-	 * this is no longer accurate after removing the filtering of YAW
-	 */
+	// From the 2nd Half it will take ~40 cycles	--> .24us
+
 }
  800284c:	bf00      	nop
  800284e:	3710      	adds	r7, #16
@@ -4958,6 +4962,7 @@ void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_g
  8002924:	60f9      	str	r1, [r7, #12]
  8002926:	edc7 0a02 	vstr	s1, [r7, #8]
  800292a:	607a      	str	r2, [r7, #4]
+	//This whole function takes ~1.5us
 
 	float Proportional = Kp_inner * massRatio * error;
  800292c:	4b3a      	ldr	r3, [pc, #232]	@ (8002a18 <UAV_PID+0x100>)
@@ -5029,8 +5034,6 @@ void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_g
  80029fc:	6a3a      	ldr	r2, [r7, #32]
  80029fe:	601a      	str	r2, [r3, #0]
 
-	// Takes about 35 - 50 cycles --> 208 - 298 ns.  this is no longer accurate after adding the fmax(), fmin()
-
 }
  8002a00:	bf00      	nop
  8002a02:	3728      	adds	r7, #40	@ 0x28
@@ -5050,6 +5053,8 @@ void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_g
 void UAV_convertThrust(){
  8002a28:	b580      	push	{r7, lr}
  8002a2a:	af00      	add	r7, sp, #0
+	//This whole function takes ~1.5us
+
 	if(rawThrust >= ELRS_higherDeadZone){//ELRS received joystick value above the middle
  8002a2c:	4b2f      	ldr	r3, [pc, #188]	@ (8002aec <UAV_convertThrust+0xc4>)
  8002a2e:	edd3 7a00 	vldr	s15, [r3]
@@ -5139,6 +5144,7 @@ void UAV_normalizeMotor(){
  8002b24:	ed2d 8b02 	vpush	{d8}
  8002b28:	b086      	sub	sp, #24
  8002b2a:	af00      	add	r7, sp, #0
+	//This whole function takes ~1.8us
 
 	Total_Thrust = Thrust / (cos(Filtered_Pitch_Angle) * cos(Filtered_Roll_Angle));
  8002b2c:	4bd4      	ldr	r3, [pc, #848]	@ (8002e80 <UAV_normalizeMotor+0x360>)
@@ -5517,7 +5523,7 @@ void UAV_convertTilt(float rawAxis, float *Axis){//	Converts Roll and Pitch to d
  8002f7c:	af00      	add	r7, sp, #0
  8002f7e:	ed87 0a01 	vstr	s0, [r7, #4]
  8002f82:	6038      	str	r0, [r7, #0]
-
+	//This whole function takes ~1.5us
 
 	//This is called ternary operation
 	int8_t direction = (rawAxis > ELRS_higherDeadZone) ? 1 : (rawAxis < ELRS_lowerDeadZone) ? -1 : 0;
@@ -5599,6 +5605,7 @@ void UAV_convertYaw(float rawAxis, float *Axis){//	Converts Yaw to degrees/secon
  800303c:	af00      	add	r7, sp, #0
  800303e:	ed87 0a01 	vstr	s0, [r7, #4]
  8003042:	6038      	str	r0, [r7, #0]
+	//This whole function takes ~1.5us
 
 	//This is called ternary operation
 	int8_t direction = (rawAxis > ELRS_higherDeadZone) ? 1 : (rawAxis < ELRS_lowerDeadZone) ? -1 : 0;

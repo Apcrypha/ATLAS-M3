@@ -455,6 +455,7 @@ int main(void)
 				  DSHOT_Fire();		//Fire the DSHOT to the ESC
 
 				  UAVloop = 0;		//Allows the ELRS to get new data
+				  //until here taked ~370 to 470 microseconds
 			  }
 
 			  while (calibrationMode){//	While calibration mode is turned on by the ELRS
@@ -1104,13 +1105,15 @@ void setServoAngle(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t angle){//	
 }
 
 void readMPU(){	//	reads the MPU values using the library
+	//This whole function takes ~350 - 450us
+
 	MPUstatus = 0;
 	if(calibrationMode){// Skip the MPU when in calibration Mode
 		return;
 	}
 
 	//Acknowledge that the INP pin was received.
-	HAL_I2C_Mem_Read(&hi2c1, (0x68 << 1), 0x3A, I2C_MEMADD_SIZE_8BIT, &int_status, 1, 100);
+	HAL_I2C_Mem_Read(&hi2c1, (0x68 << 1), 0x3A, I2C_MEMADD_SIZE_8BIT, &int_status, 1, 100);	//This  is where 97% of the fuction is stalling
 
 	// Read raw sensor data
 	status = MPU6500_ReadAccel(&accel_x, &accel_y, &accel_z);
@@ -1269,7 +1272,9 @@ uint8_t bitMask(uint16_t ch1){//	Decomposes the bits of channel 1 via bit maskin
 }
 
 void DSHOT_PreparePacket(uint16_t throttle, uint8_t motorNumber, uint8_t stop_button, uint8_t request_telemetry) {//		Receives dshot values
-    // 1. Handle Stop Button vs Active Range
+	//This whole function takes ~4.5us
+
+	// 1. Handle Stop Button vs Active Range
     if (stop_button) {
         dshot_value = 0; // Absolute stop/disarm
     }
@@ -1306,7 +1311,8 @@ void DSHOT_PreparePacket(uint16_t throttle, uint8_t motorNumber, uint8_t stop_bu
 }
 
 void DSHOT_Fire() {//	Turns the DSHOT values to PWM
-    // Cycle through all 4 motors and trigger their DMA streams
+	//This whole function takes ~6 - 8us
+	// Cycle through all 4 motors and trigger their DMA streams
     for (int i = 0; i < 4; i++) {
         // HAL_TIM_PWM_Start_DMA automatically enables the timer counter,
         // the PWM output on the pin, and the DMA request.
@@ -1315,6 +1321,7 @@ void DSHOT_Fire() {//	Turns the DSHOT values to PWM
 }
 
 void complementaryFilter(){//	Filter noise vibrations from the MPU readings
+	//This whole function takes ~1.7 - 2us
 
 	float Raw_Roll_Angle = atan2f(MPU_Data.aY, MPU_Data.aZ) * RAD_TO_DEG;
 
@@ -1333,12 +1340,8 @@ void complementaryFilter(){//	Filter noise vibrations from the MPU readings
 
 	Last_Filtered_Roll_Angle  = Filtered_Roll_Angle;
 	Last_Filtered_Pitch_Angle = Filtered_Pitch_Angle;
-	/* From the 2nd Half it will take ~40 cycles	--> .24us
-	 *
-	 * The whole Function takes about 290 - 340 cycles --> 1.7 - 2us
-	 *
-	 * this is no longer accurate after removing the filtering of YAW
-	 */
+	// From the 2nd Half it will take ~40 cycles	--> .24us
+
 }
 
 void UAV_error(){//	Computes the errors of the angles
@@ -1357,6 +1360,7 @@ void UAV_error(){//	Computes the errors of the angles
 }
 
 void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_gyro){ // format: Axis(Roll,Pitch,Yaw) , error , last integral , Current gyro axis reading , last gyro axis reading
+	//This whole function takes ~1.5us
 
 	float Proportional = Kp_inner * massRatio * error;
 	float Integral = *last_I + (Ki_inner * massRatio * error * UAV_loopTime);
@@ -1366,11 +1370,11 @@ void UAV_PID(float *Total, float error, float *last_I, float gyro, float *last_g
 	*last_gyro = gyro;
 	*last_I = Integral;
 
-	// Takes about 35 - 50 cycles --> 208 - 298 ns.  this is no longer accurate after adding the fmax(), fmin()
-
 }
 
 void UAV_convertThrust(){
+	//This whole function takes ~1.5us
+
 	if(rawThrust >= ELRS_higherDeadZone){//ELRS received joystick value above the middle
 		rawThrust = map(rawThrust, ELRS_higherDeadZone, ELRSMax, 1001, DSHOTmax);
 		Thrust = Calibrated_Hover + (DSHOTmax - Calibrated_Hover) * ( (rawThrust - DSHOTcenter) / 999.0f);
@@ -1382,6 +1386,7 @@ void UAV_convertThrust(){
 }
 
 void UAV_normalizeMotor(){
+	//This whole function takes ~1.8us
 
 	Total_Thrust = Thrust / (cos(Filtered_Pitch_Angle) * cos(Filtered_Roll_Angle));
 
@@ -1411,7 +1416,7 @@ void UAV_normalizeMotor(){
 }
 
 void UAV_convertTilt(float rawAxis, float *Axis){//	Converts Roll and Pitch to degrees
-
+	//This whole function takes ~1.5us
 
 	//This is called ternary operation
 	int8_t direction = (rawAxis > ELRS_higherDeadZone) ? 1 : (rawAxis < ELRS_lowerDeadZone) ? -1 : 0;
@@ -1430,6 +1435,7 @@ void UAV_convertTilt(float rawAxis, float *Axis){//	Converts Roll and Pitch to d
 }
 
 void UAV_convertYaw(float rawAxis, float *Axis){//	Converts Yaw to degrees/second
+	//This whole function takes ~1.5us
 
 	//This is called ternary operation
 	int8_t direction = (rawAxis > ELRS_higherDeadZone) ? 1 : (rawAxis < ELRS_lowerDeadZone) ? -1 : 0;
